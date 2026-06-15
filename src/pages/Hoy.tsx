@@ -23,7 +23,7 @@ export default function Hoy() {
       .select("id, hora_inicio, duracion_horas, firma_url, alumnos(nombre, codigo)")
       .eq("fecha", hoy)
       .order("hora_inicio")
-      .then(({ data }) => data && setClases(data as Clase[]))
+      .then(({ data }) => data && setClases(data as unknown as Clase[]))
   }
 
   useEffect(() => { cargar() }, [])
