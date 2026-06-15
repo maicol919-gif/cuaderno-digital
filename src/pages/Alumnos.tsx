@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useSearchParams } from "react-router-dom"
 import { supabase } from "../lib/supabaseClient"
 import Nav from "../components/Nav"
 
 interface Alumno { id: string; nombre: string; codigo: string | null }
 
 export default function Alumnos() {
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [alumnos, setAlumnos] = useState<Alumno[]>([])
   const [busqueda, setBusqueda] = useState("")
