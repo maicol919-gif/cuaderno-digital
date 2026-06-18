@@ -48,7 +48,7 @@ export default function Firma() {
     if (upErr) { alert("Error subiendo firma: " + upErr.message); setSaving(false); return }
     const { data: { publicUrl } } = supabase.storage.from("firmas").getPublicUrl(fileName)
     await supabase.from("clases").update({ firma_url: publicUrl }).eq("id", claseId!)
-    navigate("/")
+    navigate("/", { state: { reload: Date.now() } })
   }
 
   return (
