@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../lib/supabaseClient"
 import Nav from "../components/Nav"
-import { generarPDF } from "../lib/pdf"
+import { generarPDF, ClaseReporte } from "../lib/pdf"
 
 type Periodo = "semana" | "anterior" | "mes"
 interface ResumenAlumno { nombre: string; horas: number; clases: number }
@@ -15,7 +15,6 @@ function getRango(p: Periodo) {
   const lunes = new Date(hoy)
   lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7))
   lunes.setHours(12, 0, 0, 0)
-
   if (p === "semana") {
     const dom = new Date(lunes); dom.setDate(lunes.getDate() + 6)
     return { desde: localDate(lunes), hasta: localDate(dom), label: `${lunes.getDate()} - ${dom.getDate()} de ${dom.toLocaleDateString("es-ES", { month: "long" })}` }
@@ -30,20 +29,29 @@ function getRango(p: Periodo) {
   return { desde: localDate(ini), hasta: localDate(fin), label: hoy.toLocaleDateString("es-ES", { month: "long", year: "numeric" }) }
 }
 
+function addMins(timeStr: string, mins: number) {
+  const [h, m] = timeStr.slice(0, 5).split(":").map(Number)
+  const total = h * 60 + m + mins
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
+}
+
 export default function Resumen() {
   const [periodo, setPeriodo] = useState<Periodo>("semana")
   const [resumen, setResumen] = useState<ResumenAlumno[]>([])
   const [totalHoras, setTotalHoras] = useState(0)
   const [totalClases, setTotalClases] = useState(0)
+  const [verReporte, setVerReporte] = useState(false)
+  const [clasesReporte, setClasesReporte] = useState<ClaseReporte[]>([])
+  const [loadingReporte, setLoadingReporte] = useState(false)
   const [exporting, setExporting] = useState(false)
   const rango = getRango(periodo)
+  const instructor = JSON.parse(localStorage.getItem("cd_instructor") || "{}")
 
   useEffect(() => {
     supabase
       .from("clases")
       .select("duracion_horas, alumnos:alumno_cedula(nombre)")
-      .gte("fecha", rango.desde)
-      .lte("fecha", rango.hasta)
+      .gte("fecha", rango.desde).lte("fecha", rango.hasta)
       .then(({ data }) => {
         if (!data) return
         const map: Record<string, { horas: number; clases: number }> = {}
@@ -61,6 +69,35 @@ export default function Resumen() {
       })
   }, [periodo])
 
+  async function abrirReporte() {
+    setLoadingReporte(true)
+    setVerReporte(true)
+    const { data } = await supabase
+      .from("clases")
+      .select("fecha, hora_inicio, duracion_horas, firma_url, alumnos:alumno_cedula(nombre, cedula)")
+      .gte("fecha", rango.desde).lte("fecha", rango.hasta)
+      .order("fecha").order("hora_inicio")
+    if (data) setClasesReporte(data as unknown as ClaseReporte[])
+    setLoadingReporte(false)
+  }
+
+  async function descargarPDF() {
+    setExporting(true)
+    await generarPDF(clasesReporte, instructor.nombre ?? "Instructor", rango.label)
+    setExporting(false)
+  }
+
+  function expandBloques(clases: ClaseReporte[]) {
+    const bloques: { hora: string; cedula: string; nombre: string; firma_url: string | null }[] = []
+    for (const c of clases) {
+      const total = Math.round((c.duracion_horas * 60) / 45)
+      for (let i = 0; i < total; i++) {
+        bloques.push({ hora: addMins(c.hora_inicio, i * 45), cedula: c.alumnos.cedula, nombre: c.alumnos.nombre, firma_url: c.firma_url })
+      }
+    }
+    return bloques
+  }
+
   function fmtH(h: number) {
     if (h === Math.floor(h)) return `${h}h`
     const horas = Math.floor(h)
@@ -72,11 +109,7 @@ export default function Resumen() {
     return n.split(" ").slice(0, 2).map(p => p[0]).join("").toUpperCase()
   }
 
-  async function exportar() {
-    setExporting(true)
-    await generarPDF(resumen, totalHoras, rango.label)
-    setExporting(false)
-  }
+  const bloques = expandBloques(clasesReporte)
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
@@ -85,7 +118,7 @@ export default function Resumen() {
         <h1 style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 26 }}>Resumen</h1>
       </div>
 
-      <div style={{ flex: 1, padding: "0 22px 160px", overflowY: "auto" }}>
+      <div style={{ flex: 1, padding: "0 22px 200px", overflowY: "auto" }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           {([["semana", "Esta semana"], ["anterior", "Sem. pasada"], ["mes", "Mes"]] as const).map(([p, label]) => (
             <button key={p} onClick={() => setPeriodo(p)}
@@ -128,14 +161,82 @@ export default function Resumen() {
         ))}
       </div>
 
-      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "var(--paper)", borderTop: "1px solid var(--line)", padding: "10px 22px 30px" }}>
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--line)", margin: "6px auto 16px" }} />
-        <button onClick={exportar} disabled={exporting || resumen.length === 0}
+      <div style={{ position: "fixed", bottom: 65, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "var(--paper)", borderTop: "1px solid var(--line)", padding: "14px 22px 14px" }}>
+        <button onClick={abrirReporte} disabled={resumen.length === 0}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 54, borderRadius: 16, border: "none", background: resumen.length === 0 ? "var(--line)" : "var(--green)", color: resumen.length === 0 ? "var(--muted)" : "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: resumen.length === 0 ? "default" : "pointer" }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-          {exporting ? "Generando PDF..." : "Exportar PDF"}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Ver reporte
         </button>
       </div>
+
+      {verReporte && (
+        <div onClick={() => setVerReporte(false)} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", zIndex: 200 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: "26px 26px 0 0", width: "100%", maxHeight: "90dvh", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "10px 22px 0", flexShrink: 0 }}>
+              <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--line)", margin: "6px auto 14px" }} />
+              <div style={{ background: "var(--green)", borderRadius: 14, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <p style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 14, color: "#fff", margin: 0 }}>{instructor.nombre}</p>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", margin: 0 }}>{rango.label}</p>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 22px" }}>
+              {loadingReporte ? (
+                <div style={{ textAlign: "center", padding: "30px 0", color: "var(--muted)", fontSize: 13 }}>Cargando...</div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                      {["Hora", "Cédula", "Alumno", "#", "Firma"].map(h => (
+                        <th key={h} style={{ padding: "6px 4px", textAlign: h === "#" || h === "Firma" ? "center" : "left", fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bloques.map((b, i) => (
+                      <tr key={i} style={{ borderBottom: "0.5px solid var(--line)", background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
+                        <td style={{ padding: "8px 4px", fontWeight: 600, color: "var(--ink)", whiteSpace: "nowrap" }}>{b.hora}</td>
+                        <td style={{ padding: "8px 4px", color: "var(--muted)", fontSize: 11 }}>{b.cedula}</td>
+                        <td style={{ padding: "8px 4px", color: "var(--ink)" }}>{b.nombre}</td>
+                        <td style={{ padding: "8px 4px", textAlign: "center", color: "var(--muted)" }}>{i + 1}</td>
+                        <td style={{ padding: "8px 4px", textAlign: "center" }}>
+                          {b.firma_url
+                            ? <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: 4, background: "var(--green-soft)" }}>
+                                <svg viewBox="0 0 12 12" width="11" height="11" fill="none"><path d="M2 6l3 3 5-5" stroke="var(--green)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </span>
+                            : <span style={{ display: "inline-flex", width: 20, height: 20, borderRadius: 4, border: "0.5px solid var(--line)" }} />
+                          }
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, padding: "20px 0 8px" }}>
+                <div>
+                  <p style={{ fontSize: 10, color: "var(--muted)", margin: "0 0 18px" }}>Firma del instructor</p>
+                  <div style={{ borderBottom: "1px solid var(--ink)" }} />
+                  <p style={{ fontSize: 10, color: "var(--muted)", margin: "4px 0 0" }}>{instructor.nombre}</p>
+                </div>
+                <div>
+                  <p style={{ fontSize: 10, color: "var(--muted)", margin: "0 0 18px" }}>Recibido</p>
+                  <div style={{ borderBottom: "1px solid var(--ink)" }} />
+                  <p style={{ fontSize: 10, color: "var(--muted)", margin: "4px 0 0" }}>Sello / firma</p>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: "12px 22px 30px", flexShrink: 0, borderTop: "1px solid var(--line)" }}>
+              <button onClick={descargarPDF} disabled={exporting || loadingReporte || bloques.length === 0}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 52, borderRadius: 16, border: "none", background: "var(--green)", color: "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: "pointer", opacity: exporting ? 0.7 : 1 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                {exporting ? "Generando PDF..." : "Descargar PDF"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Nav active="resumen" />
     </div>
