@@ -4,6 +4,7 @@ import Hoy from "./pages/Hoy"
 import NuevaClase from "./pages/NuevaClase"
 import Firma from "./pages/Firma"
 import Alumnos from "./pages/Alumnos"
+import Ficha from "./pages/Ficha"
 import Resumen from "./pages/Resumen"
 import Login from "./pages/Login"
 
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/nueva-clase" element={<NuevaClase />} />
         <Route path="/firma/:claseId" element={<Firma />} />
         <Route path="/alumnos" element={<Alumnos />} />
+        <Route path="/ficha/:cedula" element={<Ficha />} />
         <Route path="/resumen" element={<Resumen />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

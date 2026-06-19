@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react"
-import { useSearchParams } from "react-router-dom"
+import { useSearchParams, useNavigate } from "react-router-dom"
 import { supabase } from "../lib/supabaseClient"
 import Nav from "../components/Nav"
 
 interface Alumno { cedula: string; nombre: string }
 
 export default function Alumnos() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [alumnos, setAlumnos] = useState<Alumno[]>([])
   const [busqueda, setBusqueda] = useState("")
@@ -69,7 +70,7 @@ export default function Alumnos() {
         </div>
 
         {filtrados.map((a, i) => (
-          <div key={a.cedula} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 4px", borderBottom: i < filtrados.length - 1 ? "1px solid var(--line)" : "none" }}>
+          <div key={a.cedula} onClick={() => navigate(`/ficha/${a.cedula}`)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 4px", borderBottom: i < filtrados.length - 1 ? "1px solid var(--line)" : "none", cursor: "pointer" }}>
             <div style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--green-soft)", color: "var(--green)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope", fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
               {initiales(a.nombre)}
             </div>

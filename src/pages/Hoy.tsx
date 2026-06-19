@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { supabase } from "../lib/supabaseClient"
+import { BANCO } from "../lib/ejercicios"
 import Nav from "../components/Nav"
 
 function logout() {
@@ -16,7 +17,14 @@ interface Clase {
   hora_inicio: string
   duracion_horas: number
   firma_url: string | null
+  ejercicios: string[]
   alumnos: { nombre: string; cedula: string }
+}
+
+interface Nota {
+  id: string
+  contenido: string
+  created_at: string
 }
 
 function localToday() {
@@ -35,6 +43,29 @@ function fmtLabel(dateStr: string, hoy: string) {
   return d.toLocaleDateString("es-ES", { day: "numeric", month: "long" }) + (dateStr === hoy ? "" : "")
 }
 
+function addMins(timeStr: string, mins: number) {
+  const [h, m] = timeStr.slice(0, 5).split(":").map(Number)
+  const total = h * 60 + m + mins
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
+}
+
+function bloqueTime(hora_inicio: string, idx: number) {
+  return `${addMins(hora_inicio, idx * 45)} – ${addMins(hora_inicio, (idx + 1) * 45)}`
+}
+
+function numBloques(duracion_horas: number) {
+  return Math.ceil(duracion_horas * 60 / 45)
+}
+
+function fmtNotaDate(isoStr: string) {
+  const d = new Date(isoStr)
+  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" }) + " " + d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
+}
+
+function isLocked(created_at: string) {
+  return new Date().getTime() - new Date(created_at).getTime() > 7 * 24 * 60 * 60 * 1000
+}
+
 export default function Hoy() {
   const hoy = localToday()
   const [fecha, setFecha] = useState(hoy)
@@ -46,6 +77,14 @@ export default function Hoy() {
   const [editFecha, setEditFecha] = useState("")
   const [editHora, setEditHora] = useState("")
   const [saving, setSaving] = useState(false)
+  const [notas, setNotas] = useState<Nota[]>([])
+  const [nuevaNota, setNuevaNota] = useState("")
+  const [savingNota, setSavingNota] = useState(false)
+  const [detalleEjs, setDetalleEjs] = useState<string[]>([])
+  const [searchBlock, setSearchBlock] = useState<number | null>(null)
+  const [searchText, setSearchText] = useState("")
+  const [editingNotaId, setEditingNotaId] = useState<string | null>(null)
+  const [editingNotaText, setEditingNotaText] = useState("")
   const dateInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
@@ -57,7 +96,7 @@ export default function Hoy() {
   function cargar(f = fecha) {
     supabase
       .from("clases")
-      .select("id, fecha, hora_inicio, duracion_horas, firma_url, alumnos:alumno_cedula(nombre, cedula)")
+      .select("id, fecha, hora_inicio, duracion_horas, firma_url, ejercicios, alumnos:alumno_cedula(nombre, cedula)")
       .eq("fecha", f)
       .order("hora_inicio")
       .then(({ data }) => data && setClases(data as unknown as Clase[]))
@@ -74,6 +113,70 @@ export default function Hoy() {
 
   function initiales(n: string) {
     return n.split(" ").slice(0, 2).map(p => p[0]).join("").toUpperCase()
+  }
+
+  function cerrarDetalle() {
+    setDetalle(null)
+    setNotas([])
+    setNuevaNota("")
+    setDetalleEjs([])
+    setSearchBlock(null)
+    setSearchText("")
+    setEditingNotaId(null)
+  }
+
+  async function abrirDetalle(c: Clase) {
+    setDetalle(c)
+    const nb = numBloques(c.duracion_horas)
+    const saved = c.ejercicios || []
+    setDetalleEjs(Array.from({ length: nb }, (_, i) => saved[i] || ""))
+    const { data } = await supabase
+      .from("notas")
+      .select("id, contenido, created_at")
+      .eq("clase_id", c.id)
+      .order("created_at")
+    if (data) setNotas(data as Nota[])
+  }
+
+  async function selectEj(blockIdx: number, ej: string) {
+    if (!detalle) return
+    const next = [...detalleEjs]
+    next[blockIdx] = ej
+    setDetalleEjs(next)
+    setSearchBlock(null)
+    setSearchText("")
+    await supabase.from("clases").update({ ejercicios: next }).eq("id", detalle.id)
+    setClases(clases.map(c => c.id === detalle.id ? { ...c, ejercicios: next } : c))
+  }
+
+  async function clearEj(blockIdx: number) {
+    if (!detalle) return
+    const next = [...detalleEjs]
+    next[blockIdx] = ""
+    setDetalleEjs(next)
+    await supabase.from("clases").update({ ejercicios: next }).eq("id", detalle.id)
+    setClases(clases.map(c => c.id === detalle.id ? { ...c, ejercicios: next } : c))
+  }
+
+  async function agregarNota() {
+    if (!nuevaNota.trim() || !detalle) return
+    setSavingNota(true)
+    const instructor = JSON.parse(localStorage.getItem("cd_instructor") || "{}")
+    const { data } = await supabase.from("notas").insert({
+      clase_id: detalle.id,
+      instructor_id: instructor.id,
+      contenido: nuevaNota.trim(),
+    }).select("id, contenido, created_at").single()
+    if (data) setNotas([...notas, data as Nota])
+    setNuevaNota("")
+    setSavingNota(false)
+  }
+
+  async function guardarEditNota(notaId: string) {
+    if (!editingNotaText.trim()) return
+    await supabase.from("notas").update({ contenido: editingNotaText.trim() }).eq("id", notaId)
+    setNotas(notas.map(n => n.id === notaId ? { ...n, contenido: editingNotaText.trim() } : n))
+    setEditingNotaId(null)
   }
 
   function abrirEditar(e: React.MouseEvent, c: Clase) {
@@ -137,7 +240,7 @@ export default function Hoy() {
 
         {clases.map(c => (
           <div key={c.id}
-            onClick={() => setDetalle(c)}
+            onClick={() => abrirDetalle(c)}
             style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, marginBottom: 10, cursor: "pointer" }}>
             <div style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 15, color: "var(--green)", width: 60, flexShrink: 0, lineHeight: 1.2 }}>
               {c.hora_inicio.slice(0, 5)}
@@ -168,46 +271,152 @@ export default function Hoy() {
       )}
 
       {detalle && (
-        <div onClick={() => setDetalle(null)} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-end", zIndex: 200 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: "26px 26px 0 0", padding: "10px 22px 34px", width: "100%" }}>
-            <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--line)", margin: "6px auto 16px" }} />
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <div style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--green-soft)", color: "var(--green)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, flexShrink: 0 }}>
-                {initiales(detalle.alumnos.nombre)}
-              </div>
-              <div>
-                <p style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 16, color: "var(--ink)", margin: 0 }}>{detalle.alumnos.nombre}</p>
-                <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>Cédula {detalle.alumnos.cedula}</p>
-              </div>
-            </div>
-            <div style={{ background: "var(--bg)", borderRadius: 14, padding: "12px 14px", marginBottom: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-              {[
-                ["Fecha", new Date(detalle.fecha + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })],
-                ["Hora inicio", detalle.hora_inicio.slice(0, 5)],
-                ["Duración", fmtDur(detalle.duracion_horas)],
-                ["Firma", detalle.firma_url ? "Registrada" : "Pendiente"],
-              ].map(([label, val]) => (
-                <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{label}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: label === "Firma" ? (detalle.firma_url ? "var(--green)" : "var(--amber)") : "var(--ink)" }}>{val}</span>
+        <div onClick={cerrarDetalle} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-end", zIndex: 200 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: "26px 26px 0 0", width: "100%", maxHeight: "90dvh", display: "flex", flexDirection: "column" }}>
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--line)", margin: "8px auto 0", flexShrink: 0 }} />
+
+            <div style={{ overflowY: "auto", padding: "16px 22px 0", flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                <div style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--green-soft)", color: "var(--green)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, flexShrink: 0 }}>
+                  {initiales(detalle.alumnos.nombre)}
                 </div>
-              ))}
+                <div>
+                  <p style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 16, color: "var(--ink)", margin: 0 }}>{detalle.alumnos.nombre}</p>
+                  <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>Cédula {detalle.alumnos.cedula}</p>
+                </div>
+              </div>
+
+              <div style={{ background: "var(--bg)", borderRadius: 14, padding: "12px 14px", marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                {[
+                  ["Fecha", new Date(detalle.fecha + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })],
+                  ["Hora inicio", detalle.hora_inicio.slice(0, 5)],
+                  ["Duración", fmtDur(detalle.duracion_horas)],
+                  ["Firma", detalle.firma_url ? "Registrada" : "Pendiente"],
+                ].map(([label, val]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: label === "Firma" ? (detalle.firma_url ? "var(--green)" : "var(--amber)") : "var(--ink)" }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Ejercicios por bloque */}
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", margin: "0 0 10px" }}>Ejercicios</p>
+              {detalleEjs.map((ej, i) => {
+                const isSearching = searchBlock === i
+                const filteredBanco = searchText.trim()
+                  ? BANCO.map(g => ({ ...g, items: g.items.filter(it => it.toLowerCase().includes(searchText.toLowerCase())) })).filter(g => g.items.length > 0)
+                  : BANCO
+                return (
+                  <div key={i} style={{ border: `1px solid ${isSearching ? "var(--green)" : "var(--line)"}`, borderRadius: 14, padding: "10px 12px", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)" }}>Bloque {i + 1}</span>
+                      <span style={{ fontSize: 11, color: "var(--muted)" }}>{bloqueTime(detalle.hora_inicio, i)}</span>
+                    </div>
+                    {isSearching ? (
+                      <div>
+                        <input autoFocus value={searchText} onChange={e => setSearchText(e.target.value)}
+                          placeholder="Buscar ejercicio…"
+                          style={{ width: "100%", boxSizing: "border-box" as const, border: "1px solid var(--green)", borderRadius: 8, padding: "7px 10px", fontSize: 13, background: "var(--bg)", color: "var(--ink)", outline: "none" }} />
+                        <div style={{ border: "1px solid var(--line)", borderRadius: 8, marginTop: 4, maxHeight: 180, overflowY: "auto" as const }}>
+                          {filteredBanco.map(g => (
+                            <div key={g.cat}>
+                              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, color: "var(--muted)", padding: "5px 10px 2px", background: "var(--bg)", letterSpacing: "0.06em" }}>{g.cat}</div>
+                              {g.items.map(item => (
+                                <div key={item} onClick={() => selectEj(i, item)}
+                                  style={{ fontSize: 13, padding: "8px 10px", borderTop: "1px solid var(--line)", cursor: "pointer", color: "var(--ink)" }}>
+                                  {item}
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                        <button onClick={() => { setSearchBlock(null); setSearchText("") }}
+                          style={{ fontSize: 12, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", marginTop: 6, padding: 0 }}>
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : ej ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "5px 10px", borderRadius: 20, background: "var(--green-soft)", color: "var(--green)", border: "1px solid var(--green)", fontWeight: 600 }}>
+                        {ej}
+                        <button onClick={() => clearEj(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--green)", fontSize: 15, lineHeight: 1, padding: 0 }}>✕</button>
+                      </span>
+                    ) : (
+                      <div onClick={() => { setSearchBlock(i); setSearchText("") }}
+                        style={{ display: "flex", alignItems: "center", gap: 8, border: "1px dashed var(--line)", borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                        Seleccionar ejercicio
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {/* Notas */}
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", margin: "16px 0 10px" }}>Notas</p>
+
+              {notas.length === 0 && <p style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic", marginBottom: 10 }}>Sin notas aún</p>}
+
+              {notas.map(n => {
+                const locked = isLocked(n.created_at)
+                const editing = editingNotaId === n.id
+                return (
+                  <div key={n.id} style={{ borderLeft: "2.5px solid var(--green)", paddingLeft: 10, marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, color: "var(--muted)" }}>{fmtNotaDate(n.created_at)}</span>
+                      {!locked && !editing && (
+                        <button onClick={() => { setEditingNotaId(n.id); setEditingNotaText(n.contenido) }}
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "var(--muted)", display: "flex", alignItems: "center" }}>
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                      )}
+                      {locked && <span style={{ fontSize: 10, color: "var(--muted)" }}>bloqueada</span>}
+                    </div>
+                    {editing ? (
+                      <div>
+                        <textarea value={editingNotaText} onChange={e => setEditingNotaText(e.target.value)} rows={3}
+                          style={{ width: "100%", boxSizing: "border-box" as const, fontSize: 13, border: "1.5px solid var(--green)", borderRadius: 8, padding: 8, background: "var(--bg)", color: "var(--ink)", resize: "none" as const }} />
+                        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                          <button onClick={() => setEditingNotaId(null)} style={{ flex: 1, height: 32, borderRadius: 8, border: "1px solid var(--line)", background: "none", fontSize: 12, cursor: "pointer", color: "var(--ink)" }}>Cancelar</button>
+                          <button onClick={() => guardarEditNota(n.id)} style={{ flex: 2, height: 32, borderRadius: 8, border: "none", background: "var(--green)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Guardar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: 13, color: "var(--ink)", margin: 0, lineHeight: 1.4 }}>{n.contenido}</p>
+                    )}
+                  </div>
+                )
+              })}
+
+              <div style={{ marginBottom: 10 }}>
+                <textarea value={nuevaNota} onChange={e => setNuevaNota(e.target.value)} placeholder="Añadir nota…" rows={2}
+                  style={{ width: "100%", boxSizing: "border-box" as const, fontSize: 13, border: "1px solid var(--line)", borderRadius: 10, padding: 10, background: "var(--bg)", color: "var(--ink)", resize: "none" as const }} />
+                {nuevaNota.trim() && (
+                  <button onClick={agregarNota} disabled={savingNota}
+                    style={{ width: "100%", height: 38, marginTop: 6, borderRadius: 10, border: "none", background: "var(--green)", color: "#fff", fontFamily: "Manrope", fontWeight: 700, fontSize: 13, cursor: "pointer", opacity: savingNota ? 0.7 : 1 }}>
+                    {savingNota ? "Guardando..." : "Guardar nota"}
+                  </button>
+                )}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {detalle.firma_url
-                ? <button onClick={() => { setFirmaVer(detalle.firma_url!); setDetalle(null) }}
-                    style={{ flex: 1, height: 46, borderRadius: 13, border: "none", background: "var(--green-soft)", color: "var(--green)", fontFamily: "Manrope", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                    Ver firma
-                  </button>
-                : <button onClick={() => { navigate(`/firma/${detalle.id}`); setDetalle(null) }}
-                    style={{ flex: 1, height: 46, borderRadius: 13, border: "none", background: "var(--amber-soft)", color: "var(--amber)", fontFamily: "Manrope", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                    Firmar
-                  </button>
-              }
-              <button onClick={e => { abrirEditar(e, detalle); setDetalle(null) }}
-                style={{ flex: 1, height: 46, borderRadius: 13, border: "1px solid var(--line)", background: "var(--paper)", fontFamily: "Manrope", fontWeight: 700, fontSize: 13, color: "var(--ink)", cursor: "pointer" }}>
-                Editar
-              </button>
+
+            <div style={{ padding: "12px 22px 34px", flexShrink: 0, borderTop: "1px solid var(--line)" }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                {detalle.firma_url
+                  ? <button onClick={() => { setFirmaVer(detalle.firma_url!); cerrarDetalle() }}
+                      style={{ flex: 1, height: 46, borderRadius: 13, border: "none", background: "var(--green-soft)", color: "var(--green)", fontFamily: "Manrope", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                      Ver firma
+                    </button>
+                  : <button onClick={() => { navigate(`/firma/${detalle.id}`); cerrarDetalle() }}
+                      style={{ flex: 1, height: 46, borderRadius: 13, border: "none", background: "var(--amber-soft)", color: "var(--amber)", fontFamily: "Manrope", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                      Firmar
+                    </button>
+                }
+                <button onClick={e => { abrirEditar(e, detalle); cerrarDetalle() }}
+                  style={{ flex: 1, height: 46, borderRadius: 13, border: "1px solid var(--line)", background: "var(--paper)", fontFamily: "Manrope", fontWeight: 700, fontSize: 13, color: "var(--ink)", cursor: "pointer" }}>
+                  Editar
+                </button>
+              </div>
             </div>
           </div>
         </div>
