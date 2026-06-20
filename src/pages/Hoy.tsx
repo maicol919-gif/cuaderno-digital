@@ -11,13 +11,18 @@ function logout() {
 
 const DURACIONES = [1, 1.5, 2, 3, 4]
 
+interface Ejercicio {
+  nombre: string
+  calificacion: number | null
+}
+
 interface Clase {
   id: string
   fecha: string
   hora_inicio: string
   duracion_horas: number
   firma_url: string | null
-  ejercicios: string[]
+  ejercicios: Ejercicio[]
   alumnos: { nombre: string; cedula: string }
 }
 
@@ -80,7 +85,7 @@ export default function Hoy() {
   const [notas, setNotas] = useState<Nota[]>([])
   const [nuevaNota, setNuevaNota] = useState("")
   const [savingNota, setSavingNota] = useState(false)
-  const [detalleEjs, setDetalleEjs] = useState<string[]>([])
+  const [detalleEjs, setDetalleEjs] = useState<Ejercicio[]>([])
   const [searchBlock, setSearchBlock] = useState<number | null>(null)
   const [searchText, setSearchText] = useState("")
   const [editingNotaId, setEditingNotaId] = useState<string | null>(null)
@@ -129,7 +134,7 @@ export default function Hoy() {
     setDetalle(c)
     const nb = numBloques(c.duracion_horas)
     const saved = c.ejercicios || []
-    setDetalleEjs(Array.from({ length: nb }, (_, i) => saved[i] || ""))
+    setDetalleEjs(Array.from({ length: nb }, (_, i) => saved[i] ?? { nombre: "", calificacion: null }))
     const { data } = await supabase
       .from("notas")
       .select("id, contenido, created_at")
@@ -138,10 +143,10 @@ export default function Hoy() {
     if (data) setNotas(data as Nota[])
   }
 
-  async function selectEj(blockIdx: number, ej: string) {
+  async function selectEj(blockIdx: number, nombre: string) {
     if (!detalle) return
     const next = [...detalleEjs]
-    next[blockIdx] = ej
+    next[blockIdx] = { ...next[blockIdx], nombre }
     setDetalleEjs(next)
     setSearchBlock(null)
     setSearchText("")
@@ -152,7 +157,7 @@ export default function Hoy() {
   async function clearEj(blockIdx: number) {
     if (!detalle) return
     const next = [...detalleEjs]
-    next[blockIdx] = ""
+    next[blockIdx] = { nombre: "", calificacion: next[blockIdx].calificacion }
     setDetalleEjs(next)
     await supabase.from("clases").update({ ejercicios: next }).eq("id", detalle.id)
     setClases(clases.map(c => c.id === detalle.id ? { ...c, ejercicios: next } : c))
@@ -336,9 +341,9 @@ export default function Hoy() {
                           Cancelar
                         </button>
                       </div>
-                    ) : ej ? (
+                    ) : ej.nombre ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "5px 10px", borderRadius: 20, background: "var(--green-soft)", color: "var(--green)", border: "1px solid var(--green)", fontWeight: 600 }}>
-                        {ej}
+                        {ej.nombre}
                         <button onClick={() => clearEj(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--green)", fontSize: 15, lineHeight: 1, padding: 0 }}>✕</button>
                       </span>
                     ) : (

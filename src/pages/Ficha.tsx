@@ -11,7 +11,7 @@ interface ClaseFicha {
   hora_inicio: string
   duracion_horas: number
   firma_url: string | null
-  ejercicios: string[]
+  ejercicios: { nombre: string; calificacion: number | null }[]
 }
 
 interface Nota {
@@ -154,12 +154,12 @@ export default function Ficha() {
                 </div>
               </div>
 
-              {ejs.some(e => e) && (
+              {ejs.some(e => e.nombre) && (
                 <div style={{ marginBottom: notas.length > 0 ? 10 : 0 }}>
-                  {ejs.map((ej, i) => ej ? (
+                  {ejs.map((ej, i) => ej.nombre ? (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                       <span style={{ fontSize: 10, color: "var(--muted)", minWidth: 16 }}>B{i + 1}</span>
-                      <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, background: "var(--green-soft)", color: "var(--green)", border: "1px solid var(--green)", fontWeight: 600 }}>{ej}</span>
+                      <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, background: "var(--green-soft)", color: "var(--green)", border: "1px solid var(--green)", fontWeight: 600 }}>{ej.nombre}</span>
                     </div>
                   ) : null)}
                 </div>
