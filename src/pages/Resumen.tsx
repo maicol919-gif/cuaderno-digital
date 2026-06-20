@@ -3,34 +3,45 @@ import { supabase } from "../lib/supabaseClient"
 import Nav from "../components/Nav"
 import { generarPDFDiario, ClaseReporte } from "../lib/pdf"
 
-type Periodo = "semana" | "anterior" | "mes"
+type Periodo = "dia" | "semana" | "mes"
 interface ResumenAlumno { nombre: string; horas: number; clases: number }
 
 function localDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
-function todayStr() {
-  return localDate(new Date())
-}
 
-function getRango(p: Periodo) {
+function getRango(p: Periodo, offset: number): { desde: string; hasta: string; label: string } {
   const hoy = new Date()
-  const lunes = new Date(hoy)
-  lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7))
-  lunes.setHours(12, 0, 0, 0)
+  if (p === "dia") {
+    const d = new Date(hoy)
+    d.setDate(hoy.getDate() + offset)
+    const str = localDate(d)
+    return {
+      desde: str,
+      hasta: str,
+      label: d.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }),
+    }
+  }
   if (p === "semana") {
-    const dom = new Date(lunes); dom.setDate(lunes.getDate() + 6)
-    return { desde: localDate(lunes), hasta: localDate(dom), label: `${lunes.getDate()} - ${dom.getDate()} de ${dom.toLocaleDateString("es-ES", { month: "long" })}` }
+    const lunes = new Date(hoy)
+    lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7) + offset * 7)
+    lunes.setHours(12, 0, 0, 0)
+    const dom = new Date(lunes)
+    dom.setDate(lunes.getDate() + 6)
+    return {
+      desde: localDate(lunes),
+      hasta: localDate(dom),
+      label: `${lunes.getDate()} – ${dom.getDate()} de ${dom.toLocaleDateString("es-ES", { month: "long" })}`,
+    }
   }
-  if (p === "anterior") {
-    const la = new Date(lunes); la.setDate(lunes.getDate() - 7)
-    const ld = new Date(la); ld.setDate(la.getDate() + 6)
-    return { desde: localDate(la), hasta: localDate(ld), label: `${la.getDate()} - ${ld.getDate()} de ${ld.toLocaleDateString("es-ES", { month: "long" })}` }
+  const ini = new Date(hoy.getFullYear(), hoy.getMonth() + offset, 1)
+  const fin = new Date(hoy.getFullYear(), hoy.getMonth() + offset + 1, 0)
+  return {
+    desde: localDate(ini),
+    hasta: localDate(fin),
+    label: ini.toLocaleDateString("es-ES", { month: "long", year: "numeric" }),
   }
-  const ini = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-  const fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
-  return { desde: localDate(ini), hasta: localDate(fin), label: hoy.toLocaleDateString("es-ES", { month: "long", year: "numeric" }) }
 }
 
 function addMins(timeStr: string, mins: number) {
@@ -41,6 +52,7 @@ function addMins(timeStr: string, mins: number) {
 
 export default function Resumen() {
   const [periodo, setPeriodo] = useState<Periodo>("semana")
+  const [offset, setOffset] = useState(0)
   const [resumen, setResumen] = useState<ResumenAlumno[]>([])
   const [totalHoras, setTotalHoras] = useState(0)
   const [totalClases, setTotalClases] = useState(0)
@@ -48,9 +60,10 @@ export default function Resumen() {
   const [clasesReporte, setClasesReporte] = useState<ClaseReporte[]>([])
   const [loadingReporte, setLoadingReporte] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [fechaPDF, setFechaPDF] = useState(todayStr)
-  const rango = getRango(periodo)
+
+  const rango = getRango(periodo, offset)
   const instructor = JSON.parse(localStorage.getItem("cd_instructor") || "{}")
+  const fechaPDFLabel = new Date(rango.desde + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
 
   useEffect(() => {
     supabase
@@ -72,7 +85,7 @@ export default function Resumen() {
         setTotalClases(data.length)
         setResumen(Object.entries(map).map(([nombre, v]) => ({ nombre, ...v })).sort((a, b) => b.horas - a.horas))
       })
-  }, [periodo])
+  }, [periodo, offset])
 
   async function abrirReporte() {
     setLoadingReporte(true)
@@ -80,7 +93,7 @@ export default function Resumen() {
     const { data } = await supabase
       .from("clases")
       .select("fecha, hora_inicio, duracion_horas, firma_url, ejercicios, alumnos:alumno_cedula(nombre, cedula)")
-      .eq("fecha", fechaPDF)
+      .eq("fecha", rango.desde)
       .order("hora_inicio")
     if (data) setClasesReporte(data as unknown as ClaseReporte[])
     setLoadingReporte(false)
@@ -88,7 +101,7 @@ export default function Resumen() {
 
   async function descargarPDF() {
     setExporting(true)
-    await generarPDFDiario(clasesReporte, instructor.nombre ?? "Instructor", fechaPDF)
+    await generarPDFDiario(clasesReporte, instructor.nombre ?? "Instructor", rango.desde)
     setExporting(false)
   }
 
@@ -122,23 +135,39 @@ export default function Resumen() {
   }
 
   const bloques = expandBloques(clasesReporte)
-  const fechaPDFLabel = new Date(fechaPDF + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
+  const canGoForward = offset < 0
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
       <div style={{ padding: "30px 22px 16px" }}>
-        <p style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>{rango.label}</p>
+        <p style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>Cuaderno digital</p>
         <h1 style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 26 }}>Resumen</h1>
       </div>
 
       <div style={{ flex: 1, padding: "0 22px 200px", overflowY: "auto" }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {([["semana", "Esta semana"], ["anterior", "Sem. pasada"], ["mes", "Mes"]] as const).map(([p, label]) => (
-            <button key={p} onClick={() => setPeriodo(p)}
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {([["dia","Día"],["semana","Semana"],["mes","Mes"]] as const).map(([p, label]) => (
+            <button key={p} onClick={() => { setPeriodo(p); setOffset(0) }}
               style={{ flex: 1, padding: "10px 0", borderRadius: 12, fontWeight: 700, fontSize: 12, border: "1px solid", borderColor: p === periodo ? "var(--green)" : "var(--line)", background: p === periodo ? "var(--green)" : "var(--paper)", color: p === periodo ? "#fff" : "var(--muted)", cursor: "pointer" }}>
               {label}
             </button>
           ))}
+        </div>
+
+        {/* Navegación */}
+        <div style={{ display: "flex", alignItems: "center", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 14, padding: "10px 14px", marginBottom: 16, gap: 8 }}>
+          <button onClick={() => setOffset(o => o - 1)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink)", padding: "2px 6px", fontSize: 18, lineHeight: 1, borderRadius: 8, display: "flex", alignItems: "center" }}>
+            ‹
+          </button>
+          <div style={{ flex: 1, textAlign: "center", fontWeight: 700, fontSize: 13, color: "var(--ink)", textTransform: "capitalize" }}>
+            {rango.label}
+          </div>
+          <button onClick={() => setOffset(o => o + 1)} disabled={!canGoForward}
+            style={{ background: "none", border: "none", cursor: canGoForward ? "pointer" : "default", color: canGoForward ? "var(--ink)" : "var(--line)", padding: "2px 6px", fontSize: 18, lineHeight: 1, borderRadius: 8, display: "flex", alignItems: "center" }}>
+            ›
+          </button>
         </div>
 
         <div style={{ background: "var(--green)", color: "#fff", borderRadius: 18, padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
@@ -174,23 +203,16 @@ export default function Resumen() {
         ))}
       </div>
 
-      <div style={{ position: "fixed", bottom: 65, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "var(--paper)", borderTop: "1px solid var(--line)", padding: "12px 22px 14px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", flexShrink: 0 }}>PDF del día</label>
-          <input
-            type="date"
-            value={fechaPDF}
-            max={todayStr()}
-            onChange={e => e.target.value && setFechaPDF(e.target.value)}
-            style={{ flex: 1, border: "1px solid var(--line)", borderRadius: 10, padding: "7px 10px", fontSize: 13, fontWeight: 600, color: "var(--ink)", background: "var(--bg)", outline: "none" }}
-          />
+      {/* Botón Ver reporte — solo en tab Día */}
+      {periodo === "dia" && (
+        <div style={{ position: "fixed", bottom: 65, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "var(--paper)", borderTop: "1px solid var(--line)", padding: "12px 22px 14px" }}>
+          <button onClick={abrirReporte}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 54, borderRadius: 16, border: "none", background: "var(--green)", color: "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            Ver reporte
+          </button>
         </div>
-        <button onClick={abrirReporte}
-          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 54, borderRadius: 16, border: "none", background: "var(--green)", color: "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          Ver reporte
-        </button>
-      </div>
+      )}
 
       {verReporte && (
         <div onClick={() => setVerReporte(false)} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", zIndex: 200 }}>
