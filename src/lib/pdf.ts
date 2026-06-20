@@ -7,28 +7,13 @@ export interface ClaseReporte {
   firma_url: string | null
   fecha: string
   alumnos: { nombre: string; cedula: string }
+  ejercicios: { nombre: string; calificacion: number | null }[] | null
 }
 
 function addMins(timeStr: string, mins: number): string {
   const [h, m] = timeStr.slice(0, 5).split(":").map(Number)
   const total = h * 60 + m + mins
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
-}
-
-function expandBloques(clases: ClaseReporte[]) {
-  const bloques: { hora: string; cedula: string; nombre: string; firma_url: string | null }[] = []
-  for (const c of clases) {
-    const total = Math.round((c.duracion_horas * 60) / 45)
-    for (let i = 0; i < total; i++) {
-      bloques.push({
-        hora: addMins(c.hora_inicio, i * 45),
-        cedula: c.alumnos.cedula,
-        nombre: c.alumnos.nombre,
-        firma_url: c.firma_url,
-      })
-    }
-  }
-  return bloques
 }
 
 async function urlToBase64(url: string): Promise<string> {
@@ -45,13 +30,27 @@ async function urlToBase64(url: string): Promise<string> {
   }
 }
 
-export async function generarPDF(
+export async function generarPDFDiario(
   clases: ClaseReporte[],
   instructorNombre: string,
-  fechaLabel: string
+  fecha: string
 ) {
-  const sorted = [...clases].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora_inicio.localeCompare(b.hora_inicio))
-  const bloques = expandBloques(sorted)
+  const sorted = [...clases].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
+
+  type Bloque = { hora: string; cedula: string; ejercicio: string; firma_url: string | null }
+  const bloques: Bloque[] = []
+  for (const c of sorted) {
+    const total = Math.round((c.duracion_horas * 60) / 45)
+    const ejs = c.ejercicios ?? []
+    for (let i = 0; i < total; i++) {
+      bloques.push({
+        hora: addMins(c.hora_inicio, i * 45),
+        cedula: c.alumnos.cedula,
+        ejercicio: ejs[i]?.nombre || "—",
+        firma_url: c.firma_url,
+      })
+    }
+  }
 
   const firmaImages: Record<number, string> = {}
   await Promise.all(
@@ -62,6 +61,11 @@ export async function generarPDF(
       }
     })
   )
+
+  const [year, month, day] = fecha.split("-")
+  const fechaLabel = new Date(`${fecha}T12:00:00`).toLocaleDateString("es-ES", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric"
+  })
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
 
@@ -79,17 +83,17 @@ export async function generarPDF(
 
   autoTable(doc, {
     startY: 36,
-    head: [["Hora", "Cédula", "Alumno", "#", "Firma"]],
-    body: bloques.map((b, i) => [b.hora, b.cedula, b.nombre, String(i + 1), ""]),
+    head: [["Fecha", "Hora", "Código alumno", "Ejercicio", "Firma"]],
+    body: bloques.map(b => [fecha, b.hora, b.cedula, b.ejercicio, ""]),
     headStyles: { fillColor: [47, 111, 79], textColor: 255, fontStyle: "bold", fontSize: 9, cellPadding: 3 },
     bodyStyles: { fontSize: 9, textColor: [31, 43, 36], cellPadding: 3, minCellHeight: ROW_H },
     alternateRowStyles: { fillColor: [245, 243, 238] },
     columnStyles: {
-      0: { cellWidth: 18 },
-      1: { cellWidth: 28 },
-      2: { cellWidth: 70 },
-      3: { cellWidth: 10, halign: "center" },
-      4: { cellWidth: 44, halign: "center" },
+      0: { cellWidth: 22 },
+      1: { cellWidth: 16 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 80 },
+      4: { cellWidth: 34, halign: "center" },
     },
     margin: { left: 15, right: 15 },
     didDrawCell: (data) => {
@@ -115,5 +119,5 @@ export async function generarPDF(
   doc.text(instructorNombre, 15, finalY + 23)
   doc.text("Recibido / Sello", 110, finalY + 19)
 
-  doc.save(`reporte-${fechaLabel.replace(/\s/g, "-")}.pdf`)
+  doc.save(`reporte-${year}-${month}-${day}.pdf`)
 }

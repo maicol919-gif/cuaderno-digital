@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../lib/supabaseClient"
 import Nav from "../components/Nav"
-import { generarPDF, ClaseReporte } from "../lib/pdf"
+import { generarPDFDiario, ClaseReporte } from "../lib/pdf"
 
 type Periodo = "semana" | "anterior" | "mes"
 interface ResumenAlumno { nombre: string; horas: number; clases: number }
 
 function localDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+
+function todayStr() {
+  return localDate(new Date())
 }
 
 function getRango(p: Periodo) {
@@ -44,6 +48,7 @@ export default function Resumen() {
   const [clasesReporte, setClasesReporte] = useState<ClaseReporte[]>([])
   const [loadingReporte, setLoadingReporte] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [fechaPDF, setFechaPDF] = useState(todayStr)
   const rango = getRango(periodo)
   const instructor = JSON.parse(localStorage.getItem("cd_instructor") || "{}")
 
@@ -74,25 +79,31 @@ export default function Resumen() {
     setVerReporte(true)
     const { data } = await supabase
       .from("clases")
-      .select("fecha, hora_inicio, duracion_horas, firma_url, alumnos:alumno_cedula(nombre, cedula)")
-      .gte("fecha", rango.desde).lte("fecha", rango.hasta)
-      .order("fecha").order("hora_inicio")
+      .select("fecha, hora_inicio, duracion_horas, firma_url, ejercicios, alumnos:alumno_cedula(nombre, cedula)")
+      .eq("fecha", fechaPDF)
+      .order("hora_inicio")
     if (data) setClasesReporte(data as unknown as ClaseReporte[])
     setLoadingReporte(false)
   }
 
   async function descargarPDF() {
     setExporting(true)
-    await generarPDF(clasesReporte, instructor.nombre ?? "Instructor", rango.label)
+    await generarPDFDiario(clasesReporte, instructor.nombre ?? "Instructor", fechaPDF)
     setExporting(false)
   }
 
   function expandBloques(clases: ClaseReporte[]) {
-    const bloques: { hora: string; cedula: string; nombre: string; firma_url: string | null }[] = []
+    const bloques: { hora: string; cedula: string; ejercicio: string; firma_url: string | null }[] = []
     for (const c of clases) {
       const total = Math.round((c.duracion_horas * 60) / 45)
+      const ejs = c.ejercicios ?? []
       for (let i = 0; i < total; i++) {
-        bloques.push({ hora: addMins(c.hora_inicio, i * 45), cedula: c.alumnos.cedula, nombre: c.alumnos.nombre, firma_url: c.firma_url })
+        bloques.push({
+          hora: addMins(c.hora_inicio, i * 45),
+          cedula: c.alumnos.cedula,
+          ejercicio: ejs[i]?.nombre || "—",
+          firma_url: c.firma_url,
+        })
       }
     }
     return bloques
@@ -110,6 +121,7 @@ export default function Resumen() {
   }
 
   const bloques = expandBloques(clasesReporte)
+  const fechaPDFLabel = new Date(fechaPDF + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
@@ -161,9 +173,19 @@ export default function Resumen() {
         ))}
       </div>
 
-      <div style={{ position: "fixed", bottom: 65, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "var(--paper)", borderTop: "1px solid var(--line)", padding: "14px 22px 14px" }}>
-        <button onClick={abrirReporte} disabled={resumen.length === 0}
-          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 54, borderRadius: 16, border: "none", background: resumen.length === 0 ? "var(--line)" : "var(--green)", color: resumen.length === 0 ? "var(--muted)" : "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: resumen.length === 0 ? "default" : "pointer" }}>
+      <div style={{ position: "fixed", bottom: 65, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, background: "var(--paper)", borderTop: "1px solid var(--line)", padding: "12px 22px 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", flexShrink: 0 }}>PDF del día</label>
+          <input
+            type="date"
+            value={fechaPDF}
+            max={todayStr()}
+            onChange={e => e.target.value && setFechaPDF(e.target.value)}
+            style={{ flex: 1, border: "1px solid var(--line)", borderRadius: 10, padding: "7px 10px", fontSize: 13, fontWeight: 600, color: "var(--ink)", background: "var(--bg)", outline: "none" }}
+          />
+        </div>
+        <button onClick={abrirReporte}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 54, borderRadius: 16, border: "none", background: "var(--green)", color: "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           Ver reporte
         </button>
@@ -176,29 +198,30 @@ export default function Resumen() {
               <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--line)", margin: "6px auto 14px" }} />
               <div style={{ background: "var(--green)", borderRadius: 14, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <p style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 14, color: "#fff", margin: 0 }}>{instructor.nombre}</p>
-                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", margin: 0 }}>{rango.label}</p>
+                <p style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", margin: 0, textTransform: "capitalize" }}>{fechaPDFLabel}</p>
               </div>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "0 22px" }}>
               {loadingReporte ? (
                 <div style={{ textAlign: "center", padding: "30px 0", color: "var(--muted)", fontSize: 13 }}>Cargando...</div>
+              ) : bloques.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "30px 0", color: "var(--muted)", fontSize: 13 }}>Sin clases este día.</div>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                      {["Hora", "Cédula", "Alumno", "#", "Firma"].map(h => (
-                        <th key={h} style={{ padding: "6px 4px", textAlign: h === "#" || h === "Firma" ? "center" : "left", fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                      {["Hora", "Código", "Ejercicio", "Firma"].map(h => (
+                        <th key={h} style={{ padding: "6px 4px", textAlign: h === "Firma" ? "center" : "left", fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {bloques.map((b, i) => (
                       <tr key={i} style={{ borderBottom: "0.5px solid var(--line)", background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
-                        <td style={{ padding: "8px 4px", fontWeight: 600, color: "var(--ink)", whiteSpace: "nowrap" }}>{b.hora}</td>
+                        <td style={{ padding: "8px 4px", fontWeight: 600, color: "var(--ink)", whiteSpace: "nowrap" as const }}>{b.hora}</td>
                         <td style={{ padding: "8px 4px", color: "var(--muted)", fontSize: 11 }}>{b.cedula}</td>
-                        <td style={{ padding: "8px 4px", color: "var(--ink)" }}>{b.nombre}</td>
-                        <td style={{ padding: "8px 4px", textAlign: "center", color: "var(--muted)" }}>{i + 1}</td>
+                        <td style={{ padding: "8px 4px", color: "var(--ink)" }}>{b.ejercicio}</td>
                         <td style={{ padding: "8px 4px", textAlign: "center" }}>
                           {b.firma_url
                             ? <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: 4, background: "var(--green-soft)" }}>
@@ -229,7 +252,7 @@ export default function Resumen() {
 
             <div style={{ padding: "12px 22px 30px", flexShrink: 0, borderTop: "1px solid var(--line)" }}>
               <button onClick={descargarPDF} disabled={exporting || loadingReporte || bloques.length === 0}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 52, borderRadius: 16, border: "none", background: "var(--green)", color: "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: "pointer", opacity: exporting ? 0.7 : 1 }}>
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 52, borderRadius: 16, border: "none", background: "var(--green)", color: "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: "pointer", opacity: exporting || bloques.length === 0 ? 0.7 : 1 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 {exporting ? "Generando PDF..." : "Descargar PDF"}
               </button>
