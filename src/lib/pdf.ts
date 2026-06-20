@@ -3,7 +3,7 @@ import autoTable from "jspdf-autotable"
 
 export interface ClaseReporte {
   hora_inicio: string
-  duracion_horas: number
+  cantidad_clases: number
   firma_url: string | null
   fecha: string
   alumnos: { nombre: string; cedula: string }
@@ -40,7 +40,7 @@ export async function generarPDFDiario(
   type Bloque = { hora: string; cedula: string; nombre: string; ejercicio: string; firma_url: string | null }
   const bloques: Bloque[] = []
   for (const c of sorted) {
-    const total = Math.round((c.duracion_horas * 60) / 45)
+    const total = c.cantidad_clases
     const ejs = c.ejercicios ?? []
     for (let i = 0; i < total; i++) {
       bloques.push({

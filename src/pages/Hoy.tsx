@@ -9,8 +9,6 @@ function logout() {
   window.location.href = "/"
 }
 
-const DURACIONES = [1, 1.5, 2, 3, 4]
-
 interface Ejercicio {
   nombre: string
   calificacion: number | null
@@ -20,7 +18,7 @@ interface Clase {
   id: string
   fecha: string
   hora_inicio: string
-  duracion_horas: number
+  cantidad_clases: number
   firma_url: string | null
   ejercicios: Ejercicio[]
   alumnos: { nombre: string; cedula: string }
@@ -58,8 +56,13 @@ function bloqueTime(hora_inicio: string, idx: number) {
   return `${addMins(hora_inicio, idx * 45)} – ${addMins(hora_inicio, (idx + 1) * 45)}`
 }
 
-function numBloques(duracion_horas: number) {
-  return Math.ceil(duracion_horas * 60 / 45)
+function fmtBloques(n: number) {
+  const mins = n * 45
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h === 0) return `${m}min`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}min`
 }
 
 function fmtNotaDate(isoStr: string) {
@@ -101,20 +104,13 @@ export default function Hoy() {
   function cargar(f = fecha) {
     supabase
       .from("clases")
-      .select("id, fecha, hora_inicio, duracion_horas, firma_url, ejercicios, alumnos:alumno_cedula(nombre, cedula)")
+      .select("id, fecha, hora_inicio, cantidad_clases, firma_url, ejercicios, alumnos:alumno_cedula(nombre, cedula)")
       .eq("fecha", f)
       .order("hora_inicio")
       .then(({ data }) => data && setClases(data as unknown as Clase[]))
   }
 
   useEffect(() => { cargar(fecha) }, [fecha, location])
-
-  function fmtDur(h: number) {
-    if (h === Math.floor(h)) return `${h}h`
-    const horas = Math.floor(h)
-    const mins = Math.round((h - horas) * 60)
-    return horas > 0 ? `${horas}h ${mins}m` : `${mins}m`
-  }
 
   function initiales(n: string) {
     return n.split(" ").slice(0, 2).map(p => p[0]).join("").toUpperCase()
@@ -132,7 +128,7 @@ export default function Hoy() {
 
   async function abrirDetalle(c: Clase) {
     setDetalle(c)
-    const nb = numBloques(c.duracion_horas)
+    const nb = c.cantidad_clases
     const saved = c.ejercicios || []
     setDetalleEjs(Array.from({ length: nb }, (_, i) => saved[i] ?? { nombre: "", calificacion: null }))
     const { data } = await supabase
@@ -196,7 +192,7 @@ export default function Hoy() {
   function abrirEditar(e: React.MouseEvent, c: Clase) {
     e.stopPropagation()
     setEditando(c)
-    setEditDur(c.duracion_horas)
+    setEditDur(c.cantidad_clases)
     setEditFecha(c.fecha ?? fecha)
     setEditHora(c.hora_inicio.slice(0, 5))
   }
@@ -204,7 +200,7 @@ export default function Hoy() {
   async function guardarEditar() {
     if (!editando) return
     setSaving(true)
-    await supabase.from("clases").update({ duracion_horas: editDur, fecha: editFecha, hora_inicio: editHora + ":00" }).eq("id", editando.id)
+    await supabase.from("clases").update({ cantidad_clases: editDur, fecha: editFecha, hora_inicio: editHora + ":00" }).eq("id", editando.id)
     setSaving(false)
     setEditando(null)
     cargar()
@@ -258,7 +254,7 @@ export default function Hoy() {
             style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, marginBottom: 10, cursor: "pointer" }}>
             <div style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 15, color: "var(--green)", width: 60, flexShrink: 0, lineHeight: 1.2 }}>
               {c.hora_inicio.slice(0, 5)}
-              <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>{fmtDur(c.duracion_horas)}</span>
+              <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>{c.cantidad_clases} clase{c.cantidad_clases > 1 ? "s" : ""} · {fmtBloques(c.cantidad_clases)}</span>
             </div>
             <div style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--green-soft)", color: "var(--green)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope", fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
               {initiales(c.alumnos.nombre)}
@@ -304,7 +300,7 @@ export default function Hoy() {
                 {[
                   ["Fecha", new Date(detalle.fecha + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })],
                   ["Hora inicio", detalle.hora_inicio.slice(0, 5)],
-                  ["Duración", fmtDur(detalle.duracion_horas)],
+                  ["Duración", `${detalle.cantidad_clases} clase${detalle.cantidad_clases > 1 ? "s" : ""} · ${fmtBloques(detalle.cantidad_clases)}`],
                   ["Firma", detalle.firma_url ? "Registrada" : "Pendiente"],
                 ].map(([label, val]) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
@@ -474,15 +470,15 @@ export default function Hoy() {
               </div>
             </div>
             <div style={{ background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 14, padding: "14px 16px", marginBottom: 16 }}>
-              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 10 }}>Duración</p>
-              <div style={{ display: "flex", gap: 8 }}>
-                {DURACIONES.map(d => (
-                  <button key={d} onClick={() => setEditDur(d)}
-                    style={{ flex: 1, padding: "10px 0", borderRadius: 12, fontWeight: 700, fontSize: 13, border: "1px solid", borderColor: d === editDur ? "var(--green)" : "var(--line)", background: d === editDur ? "var(--green)" : "var(--paper)", color: d === editDur ? "#fff" : "var(--muted)", cursor: "pointer" }}>
-                    {fmtDur(d)}
-                  </button>
-                ))}
+              <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 12 }}>Clases</p>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24 }}>
+                <button onClick={() => setEditDur(Math.max(1, editDur - 1))} disabled={editDur <= 1}
+                  style={{ width: 40, height: 40, borderRadius: 12, border: "1px solid var(--line)", background: "var(--paper)", fontWeight: 800, fontSize: 22, cursor: editDur <= 1 ? "default" : "pointer", color: editDur <= 1 ? "var(--line)" : "var(--ink)", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                <span style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 32, color: "var(--ink)", minWidth: 32, textAlign: "center" as const }}>{editDur}</span>
+                <button onClick={() => setEditDur(editDur + 1)}
+                  style={{ width: 40, height: 40, borderRadius: 12, border: "none", background: "var(--green)", fontWeight: 800, fontSize: 22, cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
               </div>
+              <p style={{ textAlign: "center" as const, fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "10px 0 0" }}>= {fmtBloques(editDur)} totales</p>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setEditando(null)} style={{ flex: 1, height: 50, borderRadius: 14, border: "1px solid var(--line)", background: "var(--paper)", fontFamily: "Manrope", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>Cancelar</button>

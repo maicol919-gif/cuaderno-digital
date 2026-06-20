@@ -9,7 +9,7 @@ interface ClaseFicha {
   id: string
   fecha: string
   hora_inicio: string
-  duracion_horas: number
+  cantidad_clases: number
   firma_url: string | null
   ejercicios: { nombre: string; calificacion: number | null }[]
 }
@@ -61,7 +61,7 @@ export default function Ficha() {
       const [{ data: al }, { data: cls }] = await Promise.all([
         supabase.from("alumnos").select("cedula, nombre").eq("cedula", cedula!).single(),
         supabase.from("clases")
-          .select("id, fecha, hora_inicio, duracion_horas, firma_url, ejercicios")
+          .select("id, fecha, hora_inicio, cantidad_clases, firma_url, ejercicios")
           .eq("alumno_cedula", cedula!)
           .order("fecha", { ascending: false }),
       ])
@@ -88,7 +88,7 @@ export default function Ficha() {
     cargar()
   }, [cedula])
 
-  const totalHoras = clases.reduce((s, c) => s + c.duracion_horas, 0)
+  const totalHoras = clases.reduce((s, c) => s + c.cantidad_clases * 45 / 60, 0)
   const totalNotas = Object.values(notasPorClase).flat().length
 
   if (loading) return (
@@ -144,7 +144,7 @@ export default function Ficha() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: ejs.length > 0 || notas.length > 0 ? 10 : 0 }}>
                 <div>
                   <span style={{ fontFamily: "Manrope", fontWeight: 700, fontSize: 14, color: "var(--green)" }}>{fmtFecha(c.fecha)}</span>
-                  <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>{c.hora_inicio.slice(0, 5)} · {fmtDur(c.duracion_horas)}</span>
+                  <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>{c.hora_inicio.slice(0, 5)} · {c.cantidad_clases} clase{c.cantidad_clases > 1 ? "s" : ""} · {fmtDur(c.cantidad_clases * 45 / 60)}</span>
                 </div>
                 <div style={{ width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: c.firma_url ? "var(--green-soft)" : "var(--amber-soft)", color: c.firma_url ? "var(--green)" : "var(--amber)", flexShrink: 0 }}>
                   {c.firma_url

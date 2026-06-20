@@ -68,18 +68,18 @@ export default function Resumen() {
   useEffect(() => {
     supabase
       .from("clases")
-      .select("duracion_horas, alumnos:alumno_cedula(nombre)")
+      .select("cantidad_clases, alumnos:alumno_cedula(nombre)")
       .gte("fecha", rango.desde).lte("fecha", rango.hasta)
       .then(({ data }) => {
         if (!data) return
         const map: Record<string, { horas: number; clases: number }> = {}
         let total = 0
-        for (const c of data as unknown as { duracion_horas: number; alumnos: { nombre: string } }[]) {
+        for (const c of data as unknown as { cantidad_clases: number; alumnos: { nombre: string } }[]) {
           const n = c.alumnos?.nombre ?? "?"
           if (!map[n]) map[n] = { horas: 0, clases: 0 }
-          map[n].horas += Number(c.duracion_horas)
+          map[n].horas += c.cantidad_clases * 45 / 60
           map[n].clases += 1
-          total += Number(c.duracion_horas)
+          total += c.cantidad_clases * 45 / 60
         }
         setTotalHoras(total)
         setTotalClases(data.length)
@@ -92,7 +92,7 @@ export default function Resumen() {
     setVerReporte(true)
     const { data } = await supabase
       .from("clases")
-      .select("fecha, hora_inicio, duracion_horas, firma_url, ejercicios, alumnos:alumno_cedula(nombre, cedula)")
+      .select("fecha, hora_inicio, cantidad_clases, firma_url, ejercicios, alumnos:alumno_cedula(nombre, cedula)")
       .eq("fecha", rango.desde)
       .order("hora_inicio")
     if (data) setClasesReporte(data as unknown as ClaseReporte[])
@@ -108,7 +108,7 @@ export default function Resumen() {
   function expandBloques(clases: ClaseReporte[]) {
     const bloques: { hora: string; cedula: string; nombre: string; ejercicio: string; firma_url: string | null }[] = []
     for (const c of clases) {
-      const total = Math.round((c.duracion_horas * 60) / 45)
+      const total = c.cantidad_clases
       const ejs = c.ejercicios ?? []
       for (let i = 0; i < total; i++) {
         bloques.push({
