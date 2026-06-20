@@ -93,7 +93,7 @@ export default function Resumen() {
   }
 
   function expandBloques(clases: ClaseReporte[]) {
-    const bloques: { hora: string; cedula: string; ejercicio: string; firma_url: string | null }[] = []
+    const bloques: { hora: string; cedula: string; nombre: string; ejercicio: string; firma_url: string | null }[] = []
     for (const c of clases) {
       const total = Math.round((c.duracion_horas * 60) / 45)
       const ejs = c.ejercicios ?? []
@@ -101,6 +101,7 @@ export default function Resumen() {
         bloques.push({
           hora: addMins(c.hora_inicio, i * 45),
           cedula: c.alumnos.cedula,
+          nombre: c.alumnos.nombre,
           ejercicio: ejs[i]?.nombre || "—",
           firma_url: c.firma_url,
         })
@@ -211,8 +212,8 @@ export default function Resumen() {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                      {["Hora", "Código", "Ejercicio", "Firma"].map(h => (
-                        <th key={h} style={{ padding: "6px 4px", textAlign: h === "Firma" ? "center" : "left", fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                      {["Hora", "Código", "Alumno", "Ejercicio", "#", "Firma"].map(h => (
+                        <th key={h} style={{ padding: "6px 4px", textAlign: (h === "Firma" || h === "#") ? "center" : "left", fontSize: 10, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -221,7 +222,9 @@ export default function Resumen() {
                       <tr key={i} style={{ borderBottom: "0.5px solid var(--line)", background: i % 2 === 0 ? "transparent" : "var(--bg)" }}>
                         <td style={{ padding: "8px 4px", fontWeight: 600, color: "var(--ink)", whiteSpace: "nowrap" as const }}>{b.hora}</td>
                         <td style={{ padding: "8px 4px", color: "var(--muted)", fontSize: 11 }}>{b.cedula}</td>
+                        <td style={{ padding: "8px 4px", color: "var(--ink)" }}>{b.nombre}</td>
                         <td style={{ padding: "8px 4px", color: "var(--ink)" }}>{b.ejercicio}</td>
+                        <td style={{ padding: "8px 4px", textAlign: "center", color: "var(--muted)", fontSize: 11 }}>{i + 1}</td>
                         <td style={{ padding: "8px 4px", textAlign: "center" }}>
                           {b.firma_url
                             ? <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: 4, background: "var(--green-soft)" }}>

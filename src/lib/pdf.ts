@@ -37,7 +37,7 @@ export async function generarPDFDiario(
 ) {
   const sorted = [...clases].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))
 
-  type Bloque = { hora: string; cedula: string; ejercicio: string; firma_url: string | null }
+  type Bloque = { hora: string; cedula: string; nombre: string; ejercicio: string; firma_url: string | null }
   const bloques: Bloque[] = []
   for (const c of sorted) {
     const total = Math.round((c.duracion_horas * 60) / 45)
@@ -46,6 +46,7 @@ export async function generarPDFDiario(
       bloques.push({
         hora: addMins(c.hora_inicio, i * 45),
         cedula: c.alumnos.cedula,
+        nombre: c.alumnos.nombre,
         ejercicio: ejs[i]?.nombre || "—",
         firma_url: c.firma_url,
       })
@@ -83,21 +84,22 @@ export async function generarPDFDiario(
 
   autoTable(doc, {
     startY: 36,
-    head: [["Fecha", "Hora", "Código alumno", "Ejercicio", "Firma"]],
-    body: bloques.map(b => [fecha, b.hora, b.cedula, b.ejercicio, ""]),
+    head: [["Hora", "Código alumno", "Alumno", "Ejercicio", "#", "Firma"]],
+    body: bloques.map((b, i) => [b.hora, b.cedula, b.nombre, b.ejercicio, String(i + 1), ""]),
     headStyles: { fillColor: [47, 111, 79], textColor: 255, fontStyle: "bold", fontSize: 9, cellPadding: 3 },
     bodyStyles: { fontSize: 9, textColor: [31, 43, 36], cellPadding: 3, minCellHeight: ROW_H },
     alternateRowStyles: { fillColor: [245, 243, 238] },
     columnStyles: {
-      0: { cellWidth: 22 },
-      1: { cellWidth: 16 },
-      2: { cellWidth: 28 },
-      3: { cellWidth: 80 },
-      4: { cellWidth: 34, halign: "center" },
+      0: { cellWidth: 16 },
+      1: { cellWidth: 26 },
+      2: { cellWidth: 42 },
+      3: { cellWidth: 56 },
+      4: { cellWidth: 10, halign: "center" },
+      5: { cellWidth: 30, halign: "center" },
     },
     margin: { left: 15, right: 15 },
     didDrawCell: (data) => {
-      if (data.column.index === 4 && data.row.section === "body") {
+      if (data.column.index === 5 && data.row.section === "body") {
         const img = firmaImages[data.row.index]
         if (img) {
           const pad = 2
