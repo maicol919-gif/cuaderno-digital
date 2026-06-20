@@ -163,6 +163,15 @@ export default function Hoy() {
     setClases(clases.map(c => c.id === detalle.id ? { ...c, ejercicios: next } : c))
   }
 
+  async function setCalificacion(blockIdx: number, valor: number | null) {
+    if (!detalle) return
+    const next = [...detalleEjs]
+    next[blockIdx] = { ...next[blockIdx], calificacion: valor }
+    setDetalleEjs(next)
+    await supabase.from("clases").update({ ejercicios: next }).eq("id", detalle.id)
+    setClases(clases.map(c => c.id === detalle.id ? { ...c, ejercicios: next } : c))
+  }
+
   async function agregarNota() {
     if (!nuevaNota.trim() || !detalle) return
     setSavingNota(true)
@@ -342,10 +351,20 @@ export default function Hoy() {
                         </button>
                       </div>
                     ) : ej.nombre ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "5px 10px", borderRadius: 20, background: "var(--green-soft)", color: "var(--green)", border: "1px solid var(--green)", fontWeight: 600 }}>
-                        {ej.nombre}
-                        <button onClick={() => clearEj(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--green)", fontSize: 15, lineHeight: 1, padding: 0 }}>✕</button>
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "5px 10px", borderRadius: 20, background: "var(--green-soft)", color: "var(--green)", border: "1px solid var(--green)", fontWeight: 600 }}>
+                          {ej.nombre}
+                          <button onClick={() => clearEj(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--green)", fontSize: 15, lineHeight: 1, padding: 0 }}>✕</button>
+                        </span>
+                        <select
+                          value={ej.calificacion ?? ""}
+                          onChange={e => setCalificacion(i, e.target.value ? Number(e.target.value) : null)}
+                          style={{ fontSize: 12, fontWeight: 600, border: "1px solid var(--line)", borderRadius: 8, padding: "4px 6px", background: "var(--bg)", color: ej.calificacion ? "var(--green)" : "var(--muted)", cursor: "pointer", outline: "none" }}
+                        >
+                          <option value="">—</option>
+                          {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
                     ) : (
                       <div onClick={() => { setSearchBlock(i); setSearchText("") }}
                         style={{ display: "flex", alignItems: "center", gap: 8, border: "1px dashed var(--line)", borderRadius: 8, padding: "8px 10px", cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>
