@@ -5,7 +5,7 @@ import { BANCO } from "../lib/ejercicios"
 
 interface Alumno { cedula: string; nombre: string }
 interface Ejercicio { nombre: string; calificacion: number | null }
-interface UltimaClaseData { horaInicio: string; nombreAlumno: string; horaFin: string }
+interface ClaseDelDia { horaInicio: string; horaFin: string; horaInicioMins: number; horaFinMins: number; nombreAlumno: string }
 
 function roundedTime() {
   const now = new Date()
@@ -49,7 +49,7 @@ export default function NuevaClase() {
   const [nuevaCedula, setNuevaCedula] = useState("")
   const [savingAlumno, setSavingAlumno] = useState(false)
   const [errorAlumno, setErrorAlumno] = useState("")
-  const [ultimaClase, setUltimaClase] = useState<UltimaClaseData | null>(null)
+  const [clasesDelDia, setClasesDelDia] = useState<ClaseDelDia[]>([])
 
   useEffect(() => {
     supabase.from("alumnos").select("cedula, nombre").order("nombre")
@@ -58,31 +58,35 @@ export default function NuevaClase() {
 
   useEffect(() => {
     const instructor = JSON.parse(localStorage.getItem("cd_instructor") || "{}")
-    if (!instructor.id || !fecha) { setUltimaClase(null); return }
+    if (!instructor.id || !fecha) { setClasesDelDia([]); return }
     supabase
       .from("clases")
       .select("hora_inicio, cantidad_clases, alumno_cedula")
       .eq("instructor_id", instructor.id)
       .eq("fecha", fecha)
       .then(({ data }) => {
-        if (!data || data.length === 0) { setUltimaClase(null); return }
-        let maxEndMins = -1
-        let maxClase = data[0]
-        for (const c of data) {
+        if (!data || data.length === 0) { setClasesDelDia([]); return }
+        setClasesDelDia(data.map(c => {
           const [h, m] = c.hora_inicio.slice(0, 5).split(":").map(Number)
-          const endMins = h * 60 + m + (c.cantidad_clases ?? 1) * 45
-          if (endMins > maxEndMins) { maxEndMins = endMins; maxClase = c }
-        }
-        const horaFin = `${Math.floor(maxEndMins / 60).toString().padStart(2, "0")}:${(maxEndMins % 60).toString().padStart(2, "0")}`
-        setUltimaClase({
-          horaInicio: maxClase.hora_inicio.slice(0, 5),
-          nombreAlumno: alumnos.find(a => a.cedula === maxClase.alumno_cedula)?.nombre ?? "Alumno",
-          horaFin,
-        })
+          const startMins = h * 60 + m
+          const endMins = startMins + (c.cantidad_clases ?? 1) * 45
+          const pad = (n: number) => n.toString().padStart(2, "0")
+          return {
+            horaInicio: c.hora_inicio.slice(0, 5),
+            horaFin: `${pad(Math.floor(endMins / 60))}:${pad(endMins % 60)}`,
+            horaInicioMins: startMins,
+            horaFinMins: endMins,
+            nombreAlumno: alumnos.find(a => a.cedula === c.alumno_cedula)?.nombre ?? "Alumno",
+          }
+        }))
       })
   }, [fecha])
 
-  const hayConflicto = ultimaClase !== null && hora < ultimaClase.horaFin
+  const [newH, newM] = hora.split(":").map(Number)
+  const newStartMins = newH * 60 + newM
+  const newEndMins = newStartMins + cantidadClases * 45
+  const conflictoClase = clasesDelDia.find(c => newStartMins < c.horaFinMins && newEndMins > c.horaInicioMins) ?? null
+  const hayConflicto = conflictoClase !== null
 
   const filtrados = alumnos.filter(a =>
     a.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -184,9 +188,9 @@ export default function NuevaClase() {
               <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: hayConflicto ? "var(--red)" : "var(--muted)", marginBottom: 6 }}>Hora inicio</label>
               <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={{ border: "none", outline: "none", background: "none", fontSize: 14, fontWeight: 600, color: hayConflicto ? "var(--red)" : "var(--ink)", width: "100%", boxSizing: "border-box" as const }} />
             </div>
-            {hayConflicto && ultimaClase && (
+            {hayConflicto && conflictoClase && (
               <p style={{ fontSize: 11, color: "var(--red)", fontWeight: 600, marginTop: 6, lineHeight: 1.4 }}>
-                La clase anterior ({ultimaClase.horaInicio}, {ultimaClase.nombreAlumno}) termina a las {ultimaClase.horaFin}. No puedes registrar antes de esa hora.
+                La clase anterior ({conflictoClase.horaInicio}, {conflictoClase.nombreAlumno}) termina a las {conflictoClase.horaFin}. No puedes registrar antes de esa hora.
               </p>
             )}
           </div>
