@@ -1,10 +1,18 @@
 import { useState, useEffect, useRef } from "react"
 import { supabase } from "../lib/supabaseClient"
 
-export default function Login({ onLogin }: { onLogin: (instructor: { id: string; nombre: string; cedula: string; academia: string | null }) => void }) {
-  const [cedula, setCedula] = useState("")
+export default function Login({
+  onLogin,
+  initialStep = "cedula",
+  initialCedula = "",
+}: {
+  onLogin: (instructor: { id: string; nombre: string; cedula: string; academia: string | null }) => void
+  initialStep?: "cedula" | "pin"
+  initialCedula?: string
+}) {
+  const [cedula, setCedula] = useState(initialCedula)
   const [pin, setPin] = useState("")
-  const [step, setStep] = useState<"cedula" | "pin">("cedula")
+  const [step, setStep] = useState<"cedula" | "pin">(initialStep)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const stepRef = useRef(step)
@@ -78,6 +86,7 @@ export default function Login({ onLogin }: { onLogin: (instructor: { id: string;
       setPin("")
     } else {
       localStorage.setItem("cd_instructor", JSON.stringify(data))
+      localStorage.setItem("cd_last_activity", Date.now().toString())
       onLogin(data)
     }
   }
@@ -99,6 +108,14 @@ export default function Login({ onLogin }: { onLogin: (instructor: { id: string;
             <p style={{ fontFamily: "Manrope, sans-serif", fontSize: 17, fontWeight: 600, color: cedula ? "#F0EDE6" : "#3A5244", margin: 0, letterSpacing: "0.04em", minHeight: 24 }}>
               {cedula || "···"}
             </p>
+            {step === "pin" && (
+              <button
+                onClick={() => { setStep("cedula"); setCedula(""); setPin(""); setError("") }}
+                style={{ background: "none", border: "none", color: "#4A9E6F", fontFamily: "Manrope, sans-serif", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0, marginTop: 4 }}
+              >
+                Cambiar
+              </button>
+            )}
           </div>
 
           <div style={{ background: step === "pin" ? "#243029" : "#1E2B23", border: step === "pin" ? "1.5px solid #2F6F4F" : "1.5px solid #2A3830", borderRadius: 16, padding: "16px 18px" }}>

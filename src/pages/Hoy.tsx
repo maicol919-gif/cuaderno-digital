@@ -6,7 +6,9 @@ import Nav from "../components/Nav"
 
 function logout() {
   localStorage.removeItem("cd_instructor")
-  window.location.href = "/"
+  localStorage.removeItem("cd_last_activity")
+  supabase.auth.signOut()
+  window.location.replace(window.location.pathname)
 }
 
 interface Ejercicio {
@@ -354,7 +356,14 @@ export default function Hoy() {
                         </span>
                         <select
                           value={ej.calificacion ?? ""}
-                          onChange={e => setCalificacion(i, e.target.value ? Number(e.target.value) : null)}
+                          onChange={e => {
+                            const nuevo = e.target.value ? Number(e.target.value) : null
+                            const actual = ej.calificacion
+                            if (actual !== null && actual !== undefined && nuevo !== null) {
+                              if (!confirm(`¿Cambiar calificación de ${actual} a ${nuevo}?`)) return
+                            }
+                            setCalificacion(i, nuevo)
+                          }}
                           style={{ fontSize: 12, fontWeight: 600, border: "1px solid var(--line)", borderRadius: 8, padding: "4px 6px", background: "var(--bg)", color: ej.calificacion ? "var(--green)" : "var(--muted)", cursor: "pointer", outline: "none" }}
                         >
                           <option value="">—</option>
