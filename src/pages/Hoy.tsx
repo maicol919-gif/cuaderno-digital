@@ -30,6 +30,7 @@ interface Nota {
   id: string
   contenido: string
   created_at: string
+  ejercicio_index: number | null
 }
 
 function localToday() {
@@ -95,6 +96,7 @@ export default function Hoy() {
   const [searchText, setSearchText] = useState("")
   const [editingNotaId, setEditingNotaId] = useState<string | null>(null)
   const [editingNotaText, setEditingNotaText] = useState("")
+  const [notaEjercicioIndex, setNotaEjercicioIndex] = useState<number | null>(null)
   const dateInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
@@ -136,7 +138,7 @@ export default function Hoy() {
     setDetalleEjs(Array.from({ length: nb }, (_, i) => saved[i] ?? { nombre: "", calificacion: null }))
     const { data } = await supabase
       .from("notas")
-      .select("id, contenido, created_at")
+      .select("id, contenido, created_at, ejercicio_index")
       .eq("clase_id", c.id)
       .order("created_at")
     if (data) setNotas(data as Nota[])
@@ -179,9 +181,11 @@ export default function Hoy() {
       clase_id: detalle.id,
       instructor_id: instructor.id,
       contenido: nuevaNota.trim(),
-    }).select("id, contenido, created_at").single()
+      ejercicio_index: notaEjercicioIndex,
+    }).select("id, contenido, created_at, ejercicio_index").single()
     if (data) setNotas([...notas, data as Nota])
     setNuevaNota("")
+    setNotaEjercicioIndex(null)
     setSavingNota(false)
   }
 
@@ -393,7 +397,13 @@ export default function Hoy() {
                 return (
                   <div key={n.id} style={{ borderLeft: "2.5px solid var(--green)", paddingLeft: 10, marginBottom: 12 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                      <span style={{ fontSize: 11, color: "var(--muted)" }}>{fmtNotaDate(n.created_at)}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {n.ejercicio_index !== null && n.ejercicio_index !== undefined
+                          ? <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: "var(--green-soft)", color: "var(--green)" }}>B{n.ejercicio_index + 1} {detalleEjs[n.ejercicio_index]?.nombre ?? ""}</span>
+                          : <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: "var(--amber-soft)", color: "var(--amber)" }}>General</span>
+                        }
+                        <span style={{ fontSize: 11, color: "var(--muted)" }}>{fmtNotaDate(n.created_at)}</span>
+                      </div>
                       {!locked && !editing && (
                         <button onClick={() => { setEditingNotaId(n.id); setEditingNotaText(n.contenido) }}
                           style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "var(--muted)", display: "flex", alignItems: "center" }}>
@@ -419,6 +429,17 @@ export default function Hoy() {
               })}
 
               <div style={{ marginBottom: 10 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                  {[{ label: "General", value: null as number | null }, ...detalleEjs.map((ej, i) => ej.nombre ? { label: `B${i + 1} ${ej.nombre}`, value: i } : null).filter(Boolean) as { label: string; value: number }[]].map(pill => {
+                    const active = notaEjercicioIndex === pill.value
+                    return (
+                      <button key={pill.value ?? "general"} onClick={() => setNotaEjercicioIndex(pill.value)}
+                        style={{ fontSize: 11, fontWeight: active ? 600 : 500, padding: "4px 10px", borderRadius: 20, cursor: "pointer", border: active ? "1px solid var(--green)" : "1px solid var(--line)", background: active ? "var(--green-soft)" : "var(--paper)", color: active ? "var(--green)" : "var(--muted)" }}>
+                        {pill.label}
+                      </button>
+                    )
+                  })}
+                </div>
                 <textarea value={nuevaNota} onChange={e => setNuevaNota(e.target.value)} placeholder="Añadir nota…" rows={2}
                   style={{ width: "100%", boxSizing: "border-box" as const, fontSize: 13, border: "1px solid var(--line)", borderRadius: 10, padding: 10, background: "var(--bg)", color: "var(--ink)", resize: "none" as const }} />
                 {nuevaNota.trim() && (
