@@ -5,6 +5,7 @@ import { BANCO } from "../lib/ejercicios"
 
 interface Alumno { cedula: string; nombre: string }
 interface Ejercicio { nombre: string; calificacion: number | null }
+interface UltimaClaseData { horaInicio: string; nombreAlumno: string; horaFin: string }
 
 function roundedTime() {
   const now = new Date()
@@ -43,11 +44,43 @@ export default function NuevaClase() {
   const [loading, setLoading] = useState(false)
   const [searchBlock, setSearchBlock] = useState<number | null>(null)
   const [searchText, setSearchText] = useState("")
+  const [showNuevoAlumno, setShowNuevoAlumno] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState("")
+  const [nuevaCedula, setNuevaCedula] = useState("")
+  const [savingAlumno, setSavingAlumno] = useState(false)
+  const [errorAlumno, setErrorAlumno] = useState("")
+  const [ultimaClase, setUltimaClase] = useState<UltimaClaseData | null>(null)
 
   useEffect(() => {
     supabase.from("alumnos").select("cedula, nombre").order("nombre")
       .then(({ data }) => data && setAlumnos(data))
   }, [])
+
+  useEffect(() => {
+    const instructor = JSON.parse(localStorage.getItem("cd_instructor") || "{}")
+    if (!instructor.id || !fecha) { setUltimaClase(null); return }
+    supabase
+      .from("clases")
+      .select("hora_inicio, cantidad_clases, alumno_cedula")
+      .eq("instructor_id", instructor.id)
+      .eq("fecha", fecha)
+      .order("hora_inicio", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (!data || data.length === 0) { setUltimaClase(null); return }
+        const c = data[0]
+        const [h, m] = c.hora_inicio.slice(0, 5).split(":").map(Number)
+        const endMins = h * 60 + m + (c.cantidad_clases ?? 1) * 45
+        const horaFin = `${Math.floor(endMins / 60).toString().padStart(2, "0")}:${(endMins % 60).toString().padStart(2, "0")}`
+        setUltimaClase({
+          horaInicio: c.hora_inicio.slice(0, 5),
+          nombreAlumno: alumnos.find(a => a.cedula === c.alumno_cedula)?.nombre ?? "Alumno",
+          horaFin,
+        })
+      })
+  }, [fecha])
+
+  const hayConflicto = ultimaClase !== null && hora < ultimaClase.horaFin
 
   const filtrados = alumnos.filter(a =>
     a.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -88,6 +121,30 @@ export default function NuevaClase() {
     setEjercicios(next)
   }
 
+  async function guardarNuevoAlumno(e: React.FormEvent) {
+    e.preventDefault()
+    setErrorAlumno("")
+    setSavingAlumno(true)
+    const instructor = JSON.parse(localStorage.getItem("cd_instructor") || "{}")
+    const { error } = await supabase.from("alumnos").insert({
+      instructor_id: instructor.id,
+      cedula: nuevaCedula,
+      nombre: nuevoNombre,
+    })
+    setSavingAlumno(false)
+    if (error) {
+      setErrorAlumno(error.code === "23505" ? "Ya existe un alumno con esa cédula" : error.message)
+      return
+    }
+    const { data } = await supabase.from("alumnos").select("cedula, nombre").order("nombre")
+    if (data) {
+      setAlumnos(data)
+      const nuevo = data.find(a => a.cedula === nuevaCedula)
+      if (nuevo) setSeleccionado(nuevo)
+    }
+    setNuevoNombre(""); setNuevaCedula(""); setShowNuevoAlumno(false)
+  }
+
   async function registrar() {
     if (!seleccionado) return
     setLoading(true)
@@ -120,9 +177,16 @@ export default function NuevaClase() {
             <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6 }}>Fecha</label>
             <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ border: "none", outline: "none", background: "none", fontSize: 14, fontWeight: 600, color: "var(--ink)", width: "100%", boxSizing: "border-box" as const }} />
           </div>
-          <div style={{ background: "var(--paper)", border: "1.5px solid var(--green)", borderRadius: 14, padding: "14px 14px", overflow: "hidden" }}>
-            <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6 }}>Hora inicio</label>
-            <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={{ border: "none", outline: "none", background: "none", fontSize: 14, fontWeight: 600, color: "var(--ink)", width: "100%", boxSizing: "border-box" as const }} />
+          <div>
+            <div style={{ background: hayConflicto ? "var(--red-soft)" : "var(--paper)", border: `1.5px solid ${hayConflicto ? "var(--red)" : "var(--green)"}`, borderRadius: 14, padding: "14px 14px", overflow: "hidden" }}>
+              <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: hayConflicto ? "var(--red)" : "var(--muted)", marginBottom: 6 }}>Hora inicio</label>
+              <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={{ border: "none", outline: "none", background: "none", fontSize: 14, fontWeight: 600, color: hayConflicto ? "var(--red)" : "var(--ink)", width: "100%", boxSizing: "border-box" as const }} />
+            </div>
+            {hayConflicto && ultimaClase && (
+              <p style={{ fontSize: 11, color: "var(--red)", fontWeight: 600, marginTop: 6, lineHeight: 1.4 }}>
+                La clase anterior ({ultimaClase.horaInicio}, {ultimaClase.nombreAlumno}) termina a las {ultimaClase.horaFin}. No puedes registrar antes de esa hora.
+              </p>
+            )}
           </div>
         </div>
 
@@ -161,11 +225,32 @@ export default function NuevaClase() {
           )
         })}
 
-        <div onClick={() => navigate("/alumnos?nuevo=1")}
-          style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 4px", cursor: "pointer" }}>
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--amber-soft)", color: "var(--amber)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope", fontWeight: 800, fontSize: 20, flexShrink: 0 }}>+</div>
-          <div style={{ flex: 1, fontWeight: 600, fontSize: 15 }}>Añadir alumno nuevo</div>
-        </div>
+        {showNuevoAlumno ? (
+          <form onSubmit={guardarNuevoAlumno} style={{ background: "var(--paper)", border: "1.5px solid var(--amber)", borderRadius: 14, padding: "14px 16px", marginTop: 6 }}>
+            <p style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--amber)", margin: "0 0 12px" }}>Nuevo alumno</p>
+            <input required value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} placeholder="Nombre completo"
+              style={{ width: "100%", boxSizing: "border-box" as const, border: "1px solid var(--line)", borderRadius: 10, padding: "9px 12px", fontSize: 14, background: "var(--bg)", color: "var(--ink)", outline: "none", marginBottom: 8 }} />
+            <input required value={nuevaCedula} onChange={e => setNuevaCedula(e.target.value)} placeholder="Cédula"
+              style={{ width: "100%", boxSizing: "border-box" as const, border: "1px solid var(--line)", borderRadius: 10, padding: "9px 12px", fontSize: 14, background: "var(--bg)", color: "var(--ink)", outline: "none", marginBottom: 8 }} />
+            {errorAlumno && <p style={{ color: "var(--red, #e53e3e)", fontSize: 12, margin: "0 0 8px" }}>{errorAlumno}</p>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" onClick={() => { setShowNuevoAlumno(false); setNuevoNombre(""); setNuevaCedula(""); setErrorAlumno("") }}
+                style={{ flex: 1, height: 40, borderRadius: 10, border: "1px solid var(--line)", background: "var(--bg)", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "var(--muted)" }}>
+                Cancelar
+              </button>
+              <button type="submit" disabled={savingAlumno}
+                style={{ flex: 1, height: 40, borderRadius: 10, border: "none", background: "var(--amber)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: savingAlumno ? 0.7 : 1 }}>
+                {savingAlumno ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div onClick={() => setShowNuevoAlumno(true)}
+            style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 4px", cursor: "pointer" }}>
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--amber-soft)", color: "var(--amber)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope", fontWeight: 800, fontSize: 20, flexShrink: 0 }}>+</div>
+            <div style={{ flex: 1, fontWeight: 600, fontSize: 15 }}>Añadir alumno nuevo</div>
+          </div>
+        )}
 
         <p style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", margin: "20px 0 10px" }}>Ejercicios</p>
         {ejercicios.map((ej, i) => {
@@ -232,8 +317,8 @@ export default function NuevaClase() {
 
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, padding: "12px 22px 28px", background: "var(--bg)", borderTop: seleccionado ? "1px solid var(--line)" : "none" }}>
         {seleccionado && (
-          <button onClick={registrar} disabled={loading}
-            style={{ width: "100%", height: 52, borderRadius: 16, border: "none", background: "var(--green)", color: "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: "pointer", opacity: loading ? 0.7 : 1 }}>
+          <button onClick={registrar} disabled={loading || hayConflicto}
+            style={{ width: "100%", height: 52, borderRadius: 16, border: "none", background: (loading || hayConflicto) ? "var(--line)" : "var(--green)", color: (loading || hayConflicto) ? "var(--muted)" : "#fff", fontFamily: "Manrope", fontWeight: 800, fontSize: 15, cursor: (loading || hayConflicto) ? "default" : "pointer", opacity: 1 }}>
             {loading ? "Registrando..." : `Registrar clase — ${seleccionado.nombre.split(" ")[0]}`}
           </button>
         )}

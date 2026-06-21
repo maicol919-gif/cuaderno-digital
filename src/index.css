@@ -9,6 +9,8 @@
   --amber: #E0993B;
   --amber-soft: #FBEDD9;
   --danger: #C75B4A;
+  --red: #C0392B;
+  --red-soft: #FBE9E7;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
