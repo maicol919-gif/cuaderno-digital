@@ -51,7 +51,7 @@ function addMins(timeStr: string, mins: number) {
 }
 
 export default function Resumen() {
-  const [periodo, setPeriodo] = useState<Periodo>("semana")
+  const [periodo, setPeriodo] = useState<Periodo>("dia")
   const [offset, setOffset] = useState(0)
   const [resumen, setResumen] = useState<ResumenAlumno[]>([])
   const [totalHoras, setTotalHoras] = useState(0)
@@ -147,7 +147,7 @@ export default function Resumen() {
       <div style={{ flex: 1, padding: "0 22px 200px", overflowY: "auto" }}>
         {/* Tabs */}
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          {([["dia","Día"],["semana","Semana"],["mes","Mes"]] as const).map(([p, label]) => (
+          {([["semana","Semana"],["dia","Día"],["mes","Mes"]] as const).map(([p, label]) => (
             <button key={p} onClick={() => { setPeriodo(p); setOffset(0) }}
               style={{ flex: 1, padding: "10px 0", borderRadius: 12, fontWeight: 700, fontSize: 12, border: "1px solid", borderColor: p === periodo ? "var(--green)" : "var(--line)", background: p === periodo ? "var(--green)" : "var(--paper)", color: p === periodo ? "#fff" : "var(--muted)", cursor: "pointer" }}>
               {label}
