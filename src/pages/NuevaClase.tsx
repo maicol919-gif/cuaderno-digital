@@ -64,17 +64,19 @@ export default function NuevaClase() {
       .select("hora_inicio, cantidad_clases, alumno_cedula")
       .eq("instructor_id", instructor.id)
       .eq("fecha", fecha)
-      .order("hora_inicio", { ascending: false })
-      .limit(1)
       .then(({ data }) => {
         if (!data || data.length === 0) { setUltimaClase(null); return }
-        const c = data[0]
-        const [h, m] = c.hora_inicio.slice(0, 5).split(":").map(Number)
-        const endMins = h * 60 + m + (c.cantidad_clases ?? 1) * 45
-        const horaFin = `${Math.floor(endMins / 60).toString().padStart(2, "0")}:${(endMins % 60).toString().padStart(2, "0")}`
+        let maxEndMins = -1
+        let maxClase = data[0]
+        for (const c of data) {
+          const [h, m] = c.hora_inicio.slice(0, 5).split(":").map(Number)
+          const endMins = h * 60 + m + (c.cantidad_clases ?? 1) * 45
+          if (endMins > maxEndMins) { maxEndMins = endMins; maxClase = c }
+        }
+        const horaFin = `${Math.floor(maxEndMins / 60).toString().padStart(2, "0")}:${(maxEndMins % 60).toString().padStart(2, "0")}`
         setUltimaClase({
-          horaInicio: c.hora_inicio.slice(0, 5),
-          nombreAlumno: alumnos.find(a => a.cedula === c.alumno_cedula)?.nombre ?? "Alumno",
+          horaInicio: maxClase.hora_inicio.slice(0, 5),
+          nombreAlumno: alumnos.find(a => a.cedula === maxClase.alumno_cedula)?.nombre ?? "Alumno",
           horaFin,
         })
       })
