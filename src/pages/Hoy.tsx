@@ -112,6 +112,7 @@ export default function Hoy() {
       .then(({ data }) => data && setClases(data as unknown as Clase[]))
   }
 
+  useEffect(() => { setFecha(localToday()) }, [location.key])
   useEffect(() => { cargar(fecha) }, [fecha, location])
 
   function initiales(n: string) {
