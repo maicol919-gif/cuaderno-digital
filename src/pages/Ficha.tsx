@@ -76,6 +76,7 @@ export default function Ficha() {
   const [clasesOpen, setClasesOpen] = useState<Record<string, boolean>>({})
   const [editandoNombre, setEditandoNombre] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState("")
+  const [expandedEjercicios, setExpandedEjercicios] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!cedula) return
@@ -243,7 +244,10 @@ export default function Ficha() {
                   const barColor = prom >= 7 ? "var(--green)" : "var(--amber)"
                   return (
                     <div key={nombre} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                      <span style={{ fontSize: 12, color: "var(--ink)", minWidth: 90, maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nombre}</span>
+                      <span
+                        onClick={() => setExpandedEjercicios(prev => ({ ...prev, [nombre]: !prev[nombre] }))}
+                        style={{ fontSize: 12, color: "var(--ink)", minWidth: 90, maxWidth: 110, overflow: "hidden", textOverflow: expandedEjercicios[nombre] ? "unset" : "ellipsis", whiteSpace: expandedEjercicios[nombre] ? "normal" : "nowrap", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}
+                      >{nombre}</span>
                       <div style={{ flex: 1, height: 6, borderRadius: 3, background: "var(--line)" }}>
                         <div style={{ width: `${Math.min(prom / 10, 1) * 100}%`, height: "100%", borderRadius: 3, background: barColor }} />
                       </div>
