@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom"
 import { supabase } from "../lib/supabaseClient"
 import Nav from "../components/Nav"
 
-interface Alumno { cedula: string; nombre: string }
+interface Alumno { cedula: string; nombre: string; archivado: boolean }
 
 export default function Alumnos() {
   const navigate = useNavigate()
@@ -15,21 +15,22 @@ export default function Alumnos() {
   const [cedula, setCedula] = useState("")
   const [saving, setSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")
+  const [verArchivados, setVerArchivados] = useState(false)
 
   function initiales(n: string) {
     return n.split(" ").slice(0, 2).map(p => p[0]).join("").toUpperCase()
   }
 
   async function cargar() {
-    const { data } = await supabase.from("alumnos").select("cedula, nombre").order("nombre")
-    if (data) setAlumnos(data)
+    const { data } = await supabase.from("alumnos").select("cedula, nombre, archivado").order("nombre")
+    if (data) setAlumnos(data as Alumno[])
   }
 
   useEffect(() => { cargar() }, [])
 
   const filtrados = alumnos.filter(a =>
-    a.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-    a.cedula.includes(busqueda)
+    (verArchivados ? a.archivado === true : a.archivado === false) &&
+    (a.nombre.toLowerCase().includes(busqueda.toLowerCase()) || a.cedula.includes(busqueda))
   )
 
   async function guardarAlumno(e: React.FormEvent) {
@@ -44,17 +45,21 @@ export default function Alumnos() {
     })
     setSaving(false)
     if (error) {
-      setErrorMsg(error.code === "23505" ? "Ya existe un alumno con esa cédula" : error.message)
+      setErrorMsg(error.code === "23505" ? "Ya existe un alumno con ese código" : error.message)
       return
     }
     setNombre(""); setCedula(""); setShowForm(false)
     cargar()
   }
 
+  const pillBase: React.CSSProperties = { height: 32, borderRadius: 20, border: "1px solid", padding: "0 14px", fontFamily: "Manrope", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center" }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
       <div style={{ padding: "30px 22px 16px" }}>
-        <p style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>{alumnos.length} alumnos</p>
+        <p style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, marginBottom: 2 }}>
+          {verArchivados ? `${filtrados.length} archivados` : `${filtrados.length} alumnos activos`}
+        </p>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h1 style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 26 }}>Mis alumnos</h1>
           <button onClick={() => setShowForm(true)} style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--green)", border: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -64,18 +69,30 @@ export default function Alumnos() {
       </div>
 
       <div style={{ flex: 1, padding: "0 22px 100px", overflowY: "auto" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 16, padding: "12px 16px", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 16, padding: "12px 16px", marginBottom: 12 }}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--muted)", flexShrink: 0 }}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
           <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre o cédula" style={{ border: "none", outline: "none", background: "none", fontSize: 15, width: "100%", color: "var(--ink)" }} />
         </div>
 
+        {/* Pills toggle */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <button
+            onClick={() => setVerArchivados(false)}
+            style={{ ...pillBase, background: !verArchivados ? "var(--ink)" : "var(--paper)", borderColor: !verArchivados ? "var(--ink)" : "var(--line)", color: !verArchivados ? "#fff" : "var(--muted)" }}
+          >Activos</button>
+          <button
+            onClick={() => setVerArchivados(true)}
+            style={{ ...pillBase, background: verArchivados ? "var(--amber-soft)" : "var(--paper)", borderColor: verArchivados ? "var(--amber)" : "var(--line)", color: verArchivados ? "var(--amber)" : "var(--muted)" }}
+          >Archivados</button>
+        </div>
+
         {filtrados.map((a, i) => (
           <div key={a.cedula} onClick={() => navigate(`/ficha/${a.cedula}`)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 4px", borderBottom: i < filtrados.length - 1 ? "1px solid var(--line)" : "none", cursor: "pointer" }}>
-            <div style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--green-soft)", color: "var(--green)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope", fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
+            <div style={{ width: 38, height: 38, borderRadius: "50%", background: verArchivados ? "#F0F0F3" : "var(--green-soft)", color: verArchivados ? "var(--muted)" : "var(--green)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope", fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
               {initiales(a.nombre)}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>{a.nombre}</div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: verArchivados ? "var(--muted)" : "var(--ink)" }}>{a.nombre}</div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 1 }}>Cédula {a.cedula}</div>
             </div>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: "var(--muted)" }}><path d="M9 6l6 6-6 6"/></svg>
@@ -93,8 +110,8 @@ export default function Alumnos() {
               <input value={nombre} onChange={e => setNombre(e.target.value)} required placeholder="Ej. Juan Rodríguez" style={{ border: "none", outline: "none", background: "none", fontSize: 16, width: "100%", color: "var(--ink)" }} />
             </div>
             <div style={{ background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 16, padding: "14px 16px", marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 6 }}>Cédula / DNI</label>
-              <input value={cedula} onChange={e => setCedula(e.target.value)} required placeholder="Ej. 1023456789" style={{ border: "none", outline: "none", background: "none", fontSize: 16, width: "100%", color: "var(--ink)" }} />
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 6 }}>Código</label>
+              <input value={cedula} onChange={e => setCedula(e.target.value)} required placeholder="Ej. 1023456789" inputMode="numeric" pattern="[0-9]*" style={{ border: "none", outline: "none", background: "none", fontSize: 16, width: "100%", color: "var(--ink)" }} />
             </div>
             {errorMsg && <p style={{ fontSize: 13, color: "var(--danger)", marginBottom: 12 }}>{errorMsg}</p>}
             <div style={{ display: "flex", gap: 10 }}>
