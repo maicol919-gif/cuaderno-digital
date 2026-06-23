@@ -43,7 +43,14 @@ export default function NuevaClase() {
   const [showNuevoAlumnoForm, setShowNuevoAlumnoForm] = useState(false)
   const [cantidadClases, setCantidadClases] = useState(1)
   const [fecha, setFecha] = useState(todayDate)
-  const [hora, setHora] = useState(roundedTime)
+  const [horaH, setHoraH] = useState(() => { const t = roundedTime(); return t.split(":")[0] })
+  const [horaM, setHoraM] = useState(() => {
+    const t = roundedTime()
+    const m = parseInt(t.split(":")[1])
+    const opts = [0, 15, 30, 45]
+    return String(opts.reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a)).padStart(2, "0")
+  })
+  const hora = `${horaH}:${horaM}`
   const [loading, setLoading] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState("")
   const [nuevaCedula, setNuevaCedula] = useState("")
@@ -163,7 +170,19 @@ export default function NuevaClase() {
           <div style={{ width: 1, background: "var(--line)", alignSelf: "stretch" }} />
           <div style={{ flex: 1, padding: "14px 14px" }}>
             <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: hayConflicto ? "var(--red)" : "var(--muted)", marginBottom: 6 }}>Hora inicio</label>
-            <input type="time" step="900" value={hora} onChange={e => setHora(e.target.value)} style={{ border: "none", outline: "none", background: "none", fontSize: 14, fontWeight: 600, color: hayConflicto ? "var(--red)" : "var(--ink)", width: "100%", boxSizing: "border-box" as const }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input type="number" min="0" max="23" value={horaH} onChange={e => setHoraH(e.target.value.padStart(2, "0"))}
+                style={{ border: "none", outline: "none", background: "none", fontSize: 15, fontWeight: 800, color: hayConflicto ? "var(--red)" : "var(--ink)", width: 28, padding: 0, MozAppearance: "textfield" as never }} />
+              <span style={{ fontSize: 15, fontWeight: 800, color: hayConflicto ? "var(--red)" : "var(--ink)", lineHeight: 1 }}>:</span>
+              <div style={{ display: "flex", gap: 3 }}>
+                {["00","15","30","45"].map(p => (
+                  <button key={p} onClick={() => setHoraM(p)} type="button"
+                    style={{ height: 24, padding: "0 5px", borderRadius: 7, fontSize: 11, fontWeight: 700, border: `1px solid ${horaM === p ? "var(--green)" : "var(--line)"}`, background: horaM === p ? "var(--green)" : "var(--bg)", color: horaM === p ? "#fff" : "var(--muted)", cursor: "pointer" }}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
         {hayConflicto && conflictoClase && (
