@@ -12,7 +12,7 @@ export const BANCO: { cat: string; items: string[] }[] = [
   },
   {
     cat: "En ciudad · Barrio",
-    items: ["Prioridades", "Stop/Ceda", "Callejeo"],
+    items: ["Prioridades", "Stop/Ceda", "Callejeo", "Estacionamiento", "Parada"],
   },
   {
     cat: "En ciudad · Vías abiertas",
@@ -34,6 +34,6 @@ export const BANCO: { cat: string; items: string[] }[] = [
   },
   {
     cat: "Pre/Examen",
-    items: ["Seguridad", "Fluidez", "Eficiencia", "Comprobaciones previas - Completas"],
+    items: ["Seguridad", "Fluidez", "Eficiencia", "Comprobaciones previas - Completas", "Incorporación y salida de vía (C/Metalurgias)", "Incorporación y salida (P/Plà)"],
   },
 ]
