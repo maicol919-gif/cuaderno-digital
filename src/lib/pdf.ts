@@ -70,7 +70,7 @@ export async function generarPDFDiario(
 
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
 
-  doc.setFillColor(47, 111, 79)
+  doc.setFillColor(0, 0, 0)
   doc.rect(0, 0, 210, 28, "F")
   doc.setTextColor(255, 255, 255)
   doc.setFont("helvetica", "bold")
@@ -86,9 +86,9 @@ export async function generarPDFDiario(
     startY: 36,
     head: [["Hora", "Código alumno", "Alumno", "Ejercicio", "#", "Firma"]],
     body: bloques.map((b, i) => [b.hora, b.cedula, b.nombre, b.ejercicio, String(i + 1), ""]),
-    headStyles: { fillColor: [47, 111, 79], textColor: 255, fontStyle: "bold", fontSize: 9, cellPadding: 3 },
-    bodyStyles: { fontSize: 9, textColor: [31, 43, 36], cellPadding: 3, minCellHeight: ROW_H },
-    alternateRowStyles: { fillColor: [245, 243, 238] },
+    headStyles: { fillColor: [0, 0, 0], textColor: 255, fontStyle: "bold", fontSize: 9, cellPadding: 3 },
+    bodyStyles: { fontSize: 9, textColor: [0, 0, 0], cellPadding: 3, minCellHeight: ROW_H },
+    alternateRowStyles: { fillColor: [240, 240, 240] },
     columnStyles: {
       0: { cellWidth: 16 },
       1: { cellWidth: 26 },
@@ -111,11 +111,11 @@ export async function generarPDFDiario(
 
   const finalY = (doc as any).lastAutoTable.finalY + 16
 
-  doc.setDrawColor(31, 43, 36)
+  doc.setDrawColor(0, 0, 0)
   doc.setLineWidth(0.4)
   doc.line(15, finalY + 14, 85, finalY + 14)
   doc.line(110, finalY + 14, 195, finalY + 14)
-  doc.setTextColor(120, 130, 125)
+  doc.setTextColor(80, 80, 80)
   doc.setFontSize(8)
   doc.text("Firma del instructor", 15, finalY + 19)
   doc.text(instructorNombre, 15, finalY + 23)
