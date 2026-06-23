@@ -20,6 +20,12 @@ function todayDate() {
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
 }
 
+function fmtFecha(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number)
+  const months = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"]
+  return `${d} ${months[m-1]} ${y}`
+}
+
 function fmtBloques(n: number) {
   const mins = n * 45
   const h = Math.floor(mins / 60)
@@ -45,6 +51,7 @@ export default function NuevaClase() {
   const [errorAlumno, setErrorAlumno] = useState("")
   const [clasesDelDia, setClasesDelDia] = useState<ClaseDelDia[]>([])
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const fechaRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     supabase.from("alumnos").select("cedula, nombre").order("nombre")
@@ -110,7 +117,7 @@ export default function NuevaClase() {
     })
     setSavingAlumno(false)
     if (error) {
-      setErrorAlumno(error.code === "23505" ? "Ya existe un alumno con esa cédula" : error.message)
+      setErrorAlumno(error.code === "23505" ? "Ya existe un alumno con ese código" : error.message)
       return
     }
     const { data } = await supabase.from("alumnos").select("cedula, nombre").order("nombre")
@@ -147,34 +154,36 @@ export default function NuevaClase() {
       </div>
 
       <div style={{ flex: 1, padding: "0 22px 100px", overflowY: "auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-          <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 14, padding: "14px 14px", overflow: "hidden" }}>
-            <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6 }}>Fecha</label>
-            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ border: "none", outline: "none", background: "none", fontSize: 14, fontWeight: 600, color: "var(--ink)", width: "100%", boxSizing: "border-box" as const }} />
+        <div style={{ background: hayConflicto ? "var(--red-soft)" : "var(--paper)", border: `1.5px solid ${hayConflicto ? "var(--red)" : "var(--line)"}`, borderRadius: 14, overflow: "hidden", marginBottom: 10, display: "flex" }}>
+          <div style={{ flex: 1, padding: "14px 14px", cursor: "pointer" }} onClick={() => fechaRef.current?.showPicker?.()}>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6, pointerEvents: "none" }}>Fecha</label>
+            <input ref={fechaRef} type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ display: "none" }} />
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>{fmtFecha(fecha)}</div>
           </div>
-          <div>
-            <div style={{ background: hayConflicto ? "var(--red-soft)" : "var(--paper)", border: `1.5px solid ${hayConflicto ? "var(--red)" : "var(--green)"}`, borderRadius: 14, padding: "14px 14px", overflow: "hidden" }}>
-              <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: hayConflicto ? "var(--red)" : "var(--muted)", marginBottom: 6 }}>Hora inicio</label>
-              <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={{ border: "none", outline: "none", background: "none", fontSize: 14, fontWeight: 600, color: hayConflicto ? "var(--red)" : "var(--ink)", width: "100%", boxSizing: "border-box" as const }} />
-            </div>
-            {hayConflicto && conflictoClase && (
-              <p style={{ fontSize: 11, color: "var(--red)", fontWeight: 600, marginTop: 6, lineHeight: 1.4 }}>
-                La clase anterior ({conflictoClase.horaInicio}, {conflictoClase.nombreAlumno}) termina a las {conflictoClase.horaFin}. No puedes registrar antes de esa hora.
-              </p>
-            )}
+          <div style={{ width: 1, background: "var(--line)", alignSelf: "stretch" }} />
+          <div style={{ flex: 1, padding: "14px 14px" }}>
+            <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: hayConflicto ? "var(--red)" : "var(--muted)", marginBottom: 6 }}>Hora inicio</label>
+            <input type="time" step="900" value={hora} onChange={e => setHora(e.target.value)} style={{ border: "none", outline: "none", background: "none", fontSize: 14, fontWeight: 600, color: hayConflicto ? "var(--red)" : "var(--ink)", width: "100%", boxSizing: "border-box" as const }} />
           </div>
         </div>
+        {hayConflicto && conflictoClase && (
+          <p style={{ fontSize: 11, color: "var(--red)", fontWeight: 600, marginTop: -4, marginBottom: 10, lineHeight: 1.4 }}>
+            La clase anterior ({conflictoClase.horaInicio}, {conflictoClase.nombreAlumno}) termina a las {conflictoClase.horaFin}. No puedes registrar antes de esa hora.
+          </p>
+        )}
 
-        <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 14, padding: "14px 16px", marginBottom: 16 }}>
-          <label style={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 12 }}>Clases</label>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 24 }}>
+        <div style={{ background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 14, padding: "14px 16px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.08em", color: "var(--muted)" }}>Bloques</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", marginTop: 2 }}>{fmtBloques(cantidadClases)}</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <button onClick={() => setCantidadClases(c => Math.max(1, c - 1))} disabled={cantidadClases <= 1}
               style={{ width: 40, height: 40, borderRadius: 12, border: "1px solid var(--line)", background: "var(--bg)", fontWeight: 800, fontSize: 22, cursor: cantidadClases <= 1 ? "default" : "pointer", color: cantidadClases <= 1 ? "var(--line)" : "var(--ink)", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
             <span style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 32, color: "var(--ink)", minWidth: 32, textAlign: "center" as const }}>{cantidadClases}</span>
             <button onClick={() => setCantidadClases(c => c + 1)}
               style={{ width: 40, height: 40, borderRadius: 12, border: "none", background: "var(--green)", fontWeight: 800, fontSize: 22, cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
           </div>
-          <p style={{ textAlign: "center" as const, fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "10px 0 0" }}>= {fmtBloques(cantidadClases)} totales</p>
         </div>
 
         <p style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", margin: "0 0 10px" }}>Alumno</p>
@@ -184,7 +193,7 @@ export default function NuevaClase() {
             <p style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--amber)", margin: "0 0 12px" }}>Nuevo alumno</p>
             <input required value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} placeholder="Nombre completo"
               style={{ width: "100%", boxSizing: "border-box" as const, border: "1px solid var(--line)", borderRadius: 10, padding: "9px 12px", fontSize: 14, background: "var(--bg)", color: "var(--ink)", outline: "none", marginBottom: 8 }} />
-            <input required value={nuevaCedula} onChange={e => setNuevaCedula(e.target.value)} placeholder="Cédula"
+            <input required value={nuevaCedula} onChange={e => setNuevaCedula(e.target.value)} placeholder="Código" inputMode="numeric" pattern="[0-9]*"
               style={{ width: "100%", boxSizing: "border-box" as const, border: "1px solid var(--line)", borderRadius: 10, padding: "9px 12px", fontSize: 14, background: "var(--bg)", color: "var(--ink)", outline: "none", marginBottom: 8 }} />
             {errorAlumno && <p style={{ color: "var(--red, #e53e3e)", fontSize: 12, margin: "0 0 8px" }}>{errorAlumno}</p>}
             <div style={{ display: "flex", gap: 8 }}>
@@ -255,7 +264,7 @@ export default function NuevaClase() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 14, color: "var(--ink)" }}>{a.nombre}</div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>Cédula {a.cedula}</div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>Código {a.cedula}</div>
                     </div>
                     {seleccionado?.cedula === a.cedula && (
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--green)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
