@@ -78,11 +78,11 @@ export default function Resumen() {
           const n = c.alumnos?.nombre ?? "?"
           if (!map[n]) map[n] = { horas: 0, clases: 0 }
           map[n].horas += c.cantidad_clases * 45 / 60
-          map[n].clases += 1
+          map[n].clases += c.cantidad_clases
           total += c.cantidad_clases * 45 / 60
         }
         setTotalHoras(total)
-        setTotalClases(data.length)
+        setTotalClases(data.reduce((sum, c) => sum + (c.cantidad_clases ?? 0), 0))
         setResumen(Object.entries(map).map(([nombre, v]) => ({ nombre, ...v })).sort((a, b) => b.horas - a.horas))
       })
   }, [periodo, offset])
