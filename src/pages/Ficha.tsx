@@ -74,6 +74,8 @@ export default function Ficha() {
   const [loading, setLoading] = useState(true)
   const [ejerciciosOpen, setEjerciciosOpen] = useState(true)
   const [clasesOpen, setClasesOpen] = useState<Record<string, boolean>>({})
+  const [editandoNombre, setEditandoNombre] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState("")
 
   useEffect(() => {
     if (!cedula) return
@@ -153,7 +155,43 @@ export default function Ficha() {
               {initiales(alumno.nombre)}
             </div>
             <div>
-              <h2 style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 18, margin: 0 }}>{alumno.nombre}</h2>
+              {editandoNombre ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    value={nuevoNombre}
+                    onChange={e => setNuevoNombre(e.target.value)}
+                    style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 18, border: "1px solid var(--green)", borderRadius: 8, padding: "2px 8px", outline: "none", width: 180 }}
+                    autoFocus
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!nuevoNombre.trim()) return
+                      await supabase.from("alumnos").update({ nombre: nuevoNombre.trim() }).eq("cedula", cedula!)
+                      setAlumno(prev => prev ? { ...prev, nombre: nuevoNombre.trim() } : prev)
+                      setEditandoNombre(false)
+                    }}
+                    style={{ fontSize: 12, fontFamily: "Manrope", fontWeight: 700, background: "var(--green)", color: "#fff", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }}
+                  >Guardar</button>
+                  <button
+                    onClick={() => setEditandoNombre(false)}
+                    style={{ fontSize: 12, fontFamily: "Manrope", fontWeight: 700, background: "var(--paper)", color: "var(--ink)", border: "1px solid var(--line)", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }}
+                  >Cancelar</button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <h2 style={{ fontFamily: "Manrope", fontWeight: 800, fontSize: 18, margin: 0 }}>{alumno.nombre}</h2>
+                  <button
+                    onClick={() => { setNuevoNombre(alumno.nombre); setEditandoNombre(true) }}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center", color: "var(--muted)" }}
+                    title="Editar nombre"
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                </div>
+              )}
               <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>Cédula {alumno.cedula}</p>
             </div>
           </div>
