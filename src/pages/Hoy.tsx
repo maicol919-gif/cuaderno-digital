@@ -449,6 +449,18 @@ export default function Hoy() {
                   </button>
                 )}
               </div>
+
+              <button
+                onClick={async () => {
+                  if (!window.confirm("¿Eliminar esta clase? Esta acción no se puede deshacer.")) return
+                  await supabase.from("clases").delete().eq("id", detalle.id)
+                  setClases(clases.filter(c => c.id !== detalle.id))
+                  setDetalle(null)
+                }}
+                style={{ width: "100%", background: "none", border: "none", cursor: "pointer", color: "var(--danger)", fontSize: 13, fontWeight: 600, padding: "10px 0 18px", textAlign: "center" as const }}
+              >
+                Eliminar clase
+              </button>
             </div>
 
             <div style={{ padding: "12px 22px 34px", flexShrink: 0, borderTop: "1px solid var(--line)" }}>
