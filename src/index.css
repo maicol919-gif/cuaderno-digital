@@ -29,3 +29,8 @@ body {
 }
 button { cursor: pointer; font-family: inherit; }
 input { font-family: inherit; }
+
+html {
+  background: linear-gradient(135deg, #0f1f14 0%, #1e3d28 50%, #0f1f14 100%);
+  min-height: 100%;
+}
